@@ -28,9 +28,10 @@ import { useToast } from "@/hooks/use-toast";
 interface TaskItemProps {
   task: Task;
   index?: number;
+  compact?: boolean;
 }
 
-export function TaskItem({ task, index = 0 }: TaskItemProps) {
+export function TaskItem({ task, index = 0, compact = false }: TaskItemProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editTitle, setEditTitle] = useState(task.title);
@@ -112,6 +113,13 @@ export function TaskItem({ task, index = 0 }: TaskItemProps) {
     }
   };
 
+  const assigneeColors: Record<string, string> = {
+    me: "bg-primary text-primary-foreground",
+    wife: "bg-secondary text-secondary-foreground",
+    us: "bg-chart-3/80 text-white",
+  };
+  const assigneeLabel: Record<string, string> = { me: "Me", wife: "Her", us: "Us" };
+
   return (
     <Collapsible
       open={isOpen}
@@ -123,23 +131,24 @@ export function TaskItem({ task, index = 0 }: TaskItemProps) {
       )}
       style={{ animationFillMode: "both", animationDelay: `${index * 50}ms` }}
     >
-      <div className="flex items-center p-3 sm:p-4 gap-3">
+      <div className={cn("flex items-center gap-3", compact ? "px-3 py-2.5" : "p-3 sm:p-4")}>
         <Checkbox
           checked={task.completed}
           onCheckedChange={handleComplete}
-          className="w-5 h-5 rounded-full border-muted-foreground/30 data-[state=checked]:bg-primary data-[state=checked]:border-primary transition-all"
+          className="w-5 h-5 rounded-full border-muted-foreground/30 data-[state=checked]:bg-primary data-[state=checked]:border-primary transition-all shrink-0"
         />
         
         <CollapsibleTrigger asChild>
-          <div className="flex-1 cursor-pointer select-none">
+          <div className="flex-1 cursor-pointer select-none min-w-0">
             <div className={cn(
-              "text-base font-medium transition-all duration-300",
+              "transition-all duration-300 truncate",
+              compact ? "text-sm font-medium" : "text-base font-medium",
               task.completed ? "line-through text-muted-foreground" : "text-foreground"
             )}>
               {task.title}
             </div>
             
-            {(task.assignee || task.dueDate) && !isOpen && (
+            {!compact && (task.assignee || task.dueDate) && !isOpen && (
               <div className="flex items-center gap-2 mt-1.5 opacity-80">
                 {getAssigneeBadge()}
                 {task.dueDate && (
@@ -152,6 +161,22 @@ export function TaskItem({ task, index = 0 }: TaskItemProps) {
             )}
           </div>
         </CollapsibleTrigger>
+
+        {/* Compact: assignee pill + due date inline */}
+        {compact && !isOpen && (
+          <div className="flex items-center gap-2 shrink-0">
+            {task.dueDate && (
+              <span className="text-xs text-muted-foreground tabular-nums">
+                {format(new Date(task.dueDate + "T00:00:00"), "MMM d")}
+              </span>
+            )}
+            {task.assignee && (
+              <span className={cn("text-[10px] font-semibold px-1.5 py-0.5 rounded-full leading-none", assigneeColors[task.assignee] || "bg-muted text-muted-foreground")}>
+                {assigneeLabel[task.assignee] || task.assignee}
+              </span>
+            )}
+          </div>
+        )}
       </div>
 
       <CollapsibleContent className="px-4 pb-4 pt-0">
