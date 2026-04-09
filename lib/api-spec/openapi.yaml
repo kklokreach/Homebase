@@ -3,20 +3,24 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: Homebase household management API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: tasks
+    description: Task management
+  - name: finances
+    description: Finance and budget management
+
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,6 +28,410 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  # ── Tasks ───────────────────────────────────────────────────────────────
+  /tasks:
+    get:
+      operationId: listTasks
+      tags: [tasks]
+      summary: List tasks with optional filters
+      parameters:
+        - name: assignee
+          in: query
+          schema:
+            type: string
+            enum: [me, wife, us]
+        - name: view
+          in: query
+          schema:
+            type: string
+            enum: [today, upcoming, mine, wife, shared]
+        - name: completed
+          in: query
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: List of tasks
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Task"
+    post:
+      operationId: createTask
+      tags: [tasks]
+      summary: Create a new task
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTaskBody"
+      responses:
+        "201":
+          description: Created task
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Task"
+
+  /tasks/{id}:
+    get:
+      operationId: getTask
+      tags: [tasks]
+      summary: Get a task by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Task
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Task"
+        "404":
+          description: Not found
+    put:
+      operationId: updateTask
+      tags: [tasks]
+      summary: Update a task
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateTaskBody"
+      responses:
+        "200":
+          description: Updated task
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Task"
+    delete:
+      operationId: deleteTask
+      tags: [tasks]
+      summary: Delete a task
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /tasks/{id}/complete:
+    post:
+      operationId: completeTask
+      tags: [tasks]
+      summary: Toggle task completion
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                completed:
+                  type: boolean
+              required: [completed]
+      responses:
+        "200":
+          description: Updated task
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Task"
+
+  /tasks/summary/today:
+    get:
+      operationId: getTodaySummary
+      tags: [tasks]
+      summary: Summary of today's tasks grouped by assignee
+      responses:
+        "200":
+          description: Today task summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TodaySummary"
+
+  # ── Budget Categories ────────────────────────────────────────────────────
+  /budget/categories:
+    get:
+      operationId: listBudgetCategories
+      tags: [finances]
+      summary: List all budget categories
+      responses:
+        "200":
+          description: Budget categories
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/BudgetCategory"
+    post:
+      operationId: createBudgetCategory
+      tags: [finances]
+      summary: Create a budget category
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateBudgetCategoryBody"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BudgetCategory"
+
+  /budget/categories/{id}:
+    put:
+      operationId: updateBudgetCategory
+      tags: [finances]
+      summary: Update a budget category
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateBudgetCategoryBody"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BudgetCategory"
+    delete:
+      operationId: deleteBudgetCategory
+      tags: [finances]
+      summary: Delete a budget category
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  # ── Monthly Budgets ──────────────────────────────────────────────────────
+  /budget/monthly:
+    get:
+      operationId: listMonthlyBudgets
+      tags: [finances]
+      summary: List monthly budget allocations
+      parameters:
+        - name: year
+          in: query
+          schema:
+            type: integer
+        - name: month
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Monthly budgets
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MonthlyBudget"
+    post:
+      operationId: upsertMonthlyBudget
+      tags: [finances]
+      summary: Set monthly budget for a category
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpsertMonthlyBudgetBody"
+      responses:
+        "200":
+          description: Upserted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MonthlyBudget"
+
+  # ── Transactions ─────────────────────────────────────────────────────────
+  /transactions:
+    get:
+      operationId: listTransactions
+      tags: [finances]
+      summary: List transactions
+      parameters:
+        - name: year
+          in: query
+          schema:
+            type: integer
+        - name: month
+          in: query
+          schema:
+            type: integer
+        - name: categoryId
+          in: query
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Transactions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Transaction"
+    post:
+      operationId: createTransaction
+      tags: [finances]
+      summary: Create a transaction
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTransactionBody"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Transaction"
+
+  /transactions/{id}:
+    put:
+      operationId: updateTransaction
+      tags: [finances]
+      summary: Update a transaction
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateTransactionBody"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Transaction"
+    delete:
+      operationId: deleteTransaction
+      tags: [finances]
+      summary: Delete a transaction
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  # ── Finance Dashboard ─────────────────────────────────────────────────────
+  /budget/dashboard:
+    get:
+      operationId: getBudgetDashboard
+      tags: [finances]
+      summary: Get monthly budget dashboard with rollover and spent totals
+      parameters:
+        - name: year
+          in: query
+          schema:
+            type: integer
+        - name: month
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Dashboard
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BudgetDashboard"
+
+  /budget/annual:
+    get:
+      operationId: getAnnualReview
+      tags: [finances]
+      summary: Annual spending review by category
+      parameters:
+        - name: year
+          in: query
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Annual review
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnnualReview"
+
+  /home/snapshot:
+    get:
+      operationId: getHomeSnapshot
+      tags: [finances]
+      summary: Home screen snapshot with tasks and budget summary
+      responses:
+        "200":
+          description: Home snapshot
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HomeSnapshot"
+
 components:
   schemas:
     HealthStatus:
@@ -31,6 +439,359 @@ components:
       properties:
         status:
           type: string
-      required:
-        - status
+      required: [status]
 
+    Task:
+      type: object
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        assignee:
+          type: string
+          nullable: true
+          enum: [me, wife, us, null]
+        dueDate:
+          type: string
+          nullable: true
+          format: date
+        recurring:
+          type: string
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+        category:
+          type: string
+          nullable: true
+        completed:
+          type: boolean
+        completedAt:
+          type: string
+          nullable: true
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required: [id, title, completed, createdAt, updatedAt]
+
+    CreateTaskBody:
+      type: object
+      properties:
+        title:
+          type: string
+        assignee:
+          type: string
+          nullable: true
+          enum: [me, wife, us, null]
+        dueDate:
+          type: string
+          nullable: true
+          format: date
+        recurring:
+          type: string
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+        category:
+          type: string
+          nullable: true
+      required: [title]
+
+    UpdateTaskBody:
+      type: object
+      properties:
+        title:
+          type: string
+        assignee:
+          type: string
+          nullable: true
+          enum: [me, wife, us, null]
+        dueDate:
+          type: string
+          nullable: true
+          format: date
+        recurring:
+          type: string
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+        category:
+          type: string
+          nullable: true
+        completed:
+          type: boolean
+
+    TodaySummary:
+      type: object
+      properties:
+        me:
+          type: array
+          items:
+            $ref: "#/components/schemas/Task"
+        wife:
+          type: array
+          items:
+            $ref: "#/components/schemas/Task"
+        shared:
+          type: array
+          items:
+            $ref: "#/components/schemas/Task"
+        totalToday:
+          type: integer
+        completedToday:
+          type: integer
+      required: [me, wife, shared, totalToday, completedToday]
+
+    BudgetCategory:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        icon:
+          type: string
+          nullable: true
+        color:
+          type: string
+          nullable: true
+        sortOrder:
+          type: integer
+      required: [id, name, sortOrder]
+
+    CreateBudgetCategoryBody:
+      type: object
+      properties:
+        name:
+          type: string
+        icon:
+          type: string
+          nullable: true
+        color:
+          type: string
+          nullable: true
+        sortOrder:
+          type: integer
+      required: [name]
+
+    UpdateBudgetCategoryBody:
+      type: object
+      properties:
+        name:
+          type: string
+        icon:
+          type: string
+          nullable: true
+        color:
+          type: string
+          nullable: true
+        sortOrder:
+          type: integer
+
+    MonthlyBudget:
+      type: object
+      properties:
+        id:
+          type: integer
+        categoryId:
+          type: integer
+        year:
+          type: integer
+        month:
+          type: integer
+        budgetAmount:
+          type: number
+      required: [id, categoryId, year, month, budgetAmount]
+
+    UpsertMonthlyBudgetBody:
+      type: object
+      properties:
+        categoryId:
+          type: integer
+        year:
+          type: integer
+        month:
+          type: integer
+        budgetAmount:
+          type: number
+      required: [categoryId, year, month, budgetAmount]
+
+    Transaction:
+      type: object
+      properties:
+        id:
+          type: integer
+        amount:
+          type: number
+        merchant:
+          type: string
+        categoryId:
+          type: integer
+          nullable: true
+        categoryName:
+          type: string
+          nullable: true
+        date:
+          type: string
+          format: date
+        notes:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, amount, merchant, date, createdAt]
+
+    CreateTransactionBody:
+      type: object
+      properties:
+        amount:
+          type: number
+        merchant:
+          type: string
+        categoryId:
+          type: integer
+          nullable: true
+        date:
+          type: string
+          format: date
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+      required: [amount, merchant]
+
+    UpdateTransactionBody:
+      type: object
+      properties:
+        amount:
+          type: number
+        merchant:
+          type: string
+        categoryId:
+          type: integer
+          nullable: true
+        date:
+          type: string
+          format: date
+        notes:
+          type: string
+          nullable: true
+
+    BudgetCategoryLine:
+      type: object
+      properties:
+        categoryId:
+          type: integer
+        categoryName:
+          type: string
+        budgeted:
+          type: number
+        rollover:
+          type: number
+        available:
+          type: number
+        spent:
+          type: number
+        left:
+          type: number
+      required: [categoryId, categoryName, budgeted, rollover, available, spent, left]
+
+    BudgetDashboard:
+      type: object
+      properties:
+        year:
+          type: integer
+        month:
+          type: integer
+        totalBudgeted:
+          type: number
+        totalRollover:
+          type: number
+        totalAvailable:
+          type: number
+        totalSpent:
+          type: number
+        totalLeft:
+          type: number
+        categories:
+          type: array
+          items:
+            $ref: "#/components/schemas/BudgetCategoryLine"
+        recentTransactions:
+          type: array
+          items:
+            $ref: "#/components/schemas/Transaction"
+      required: [year, month, totalBudgeted, totalRollover, totalAvailable, totalSpent, totalLeft, categories, recentTransactions]
+
+    AnnualCategoryRow:
+      type: object
+      properties:
+        categoryId:
+          type: integer
+        categoryName:
+          type: string
+        totalBudgeted:
+          type: number
+        totalSpent:
+          type: number
+        monthlyData:
+          type: array
+          items:
+            type: object
+            properties:
+              month:
+                type: integer
+              budgeted:
+                type: number
+              spent:
+                type: number
+            required: [month, budgeted, spent]
+      required: [categoryId, categoryName, totalBudgeted, totalSpent, monthlyData]
+
+    AnnualReview:
+      type: object
+      properties:
+        year:
+          type: integer
+        totalBudgeted:
+          type: number
+        totalSpent:
+          type: number
+        categories:
+          type: array
+          items:
+            $ref: "#/components/schemas/AnnualCategoryRow"
+      required: [year, totalBudgeted, totalSpent, categories]
+
+    HomeSnapshot:
+      type: object
+      properties:
+        todayTasks:
+          $ref: "#/components/schemas/TodaySummary"
+        budgetSnapshot:
+          type: object
+          properties:
+            totalAvailable:
+              type: number
+            totalSpent:
+              type: number
+            totalLeft:
+              type: number
+            month:
+              type: integer
+            year:
+              type: integer
+          required: [totalAvailable, totalSpent, totalLeft, month, year]
+        recentTransactions:
+          type: array
+          items:
+            $ref: "#/components/schemas/Transaction"
+      required: [todayTasks, budgetSnapshot, recentTransactions]
