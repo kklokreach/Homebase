@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { format } from "date-fns";
-import { Plus, Receipt, TrendingDown, Wallet } from "lucide-react";
+import { format, addMonths, subMonths } from "date-fns";
+import { ChevronLeft, ChevronRight, Plus, Wallet } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useGetBudgetDashboard,
@@ -10,22 +10,31 @@ import {
   getListTransactionsQueryKey,
   getGetHomeSnapshotQueryKey,
 } from "@workspace/api-client-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
-function TransactionForm() {
+function fmt(n: number, showSign = false) {
+  const abs = Math.abs(n).toLocaleString("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0,
+  });
+  if (showSign && n > 0) return `+${abs}`;
+  if (n < 0) return `-${abs}`;
+  return abs;
+}
+
+function TransactionForm({ year, month }: { year: number; month: number }) {
   const [amount, setAmount] = useState("");
   const [merchant, setMerchant] = useState("");
   const [categoryId, setCategoryId] = useState<string>("null");
-  const [isExpanded, setIsExpanded] = useState(false);
-  
+  const [showCategory, setShowCategory] = useState(false);
+
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { data: categories } = useListBudgetCategories();
@@ -41,223 +50,307 @@ function TransactionForm() {
           amount: Number(amount),
           merchant,
           categoryId: categoryId === "null" ? null : Number(categoryId),
-        }
+        },
       },
       {
         onSuccess: () => {
           setAmount("");
           setMerchant("");
           setCategoryId("null");
-          setIsExpanded(false);
-          toast({ title: "Transaction added successfully" });
+          setShowCategory(false);
+          toast({ title: "Transaction added" });
           queryClient.invalidateQueries({ queryKey: getGetBudgetDashboardQueryKey() });
           queryClient.invalidateQueries({ queryKey: getListTransactionsQueryKey() });
           queryClient.invalidateQueries({ queryKey: getGetHomeSnapshotQueryKey() });
         },
         onError: () => {
           toast({ title: "Failed to add transaction", variant: "destructive" });
-        }
+        },
       }
     );
   };
 
   return (
-    <Card className="bg-primary/5 border-primary/20 overflow-hidden shadow-sm transition-all duration-300">
-      <form onSubmit={handleSubmit}>
-        <div className="p-4 sm:p-6 space-y-4">
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="font-semibold text-primary flex items-center">
-              <Plus className="w-4 h-4 mr-1" /> Quick Add
-            </h3>
-          </div>
-          
-          <div className="grid grid-cols-1 sm:grid-cols-12 gap-4 items-end">
-            <div className="sm:col-span-3 space-y-1.5">
-              <Label className="text-xs uppercase tracking-wider opacity-70">Amount</Label>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-mono">$</span>
-                <Input
-                  type="number"
-                  step="0.01"
-                  placeholder="0.00"
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
-                  className="pl-7 font-mono text-lg bg-background border-border/50 h-12"
-                  required
-                />
-              </div>
-            </div>
-            <div className="sm:col-span-5 space-y-1.5">
-              <Label className="text-xs uppercase tracking-wider opacity-70">Merchant</Label>
-              <Input
-                placeholder="Where?"
-                value={merchant}
-                onChange={(e) => setMerchant(e.target.value)}
-                className="bg-background border-border/50 h-12"
-                required
-              />
-            </div>
-            <div className="sm:col-span-4 flex gap-3 h-12">
-              {isExpanded ? (
-                <div className="flex-1">
-                  <Select value={categoryId} onValueChange={setCategoryId}>
-                    <SelectTrigger className="h-12 bg-background border-border/50">
-                      <SelectValue placeholder="Category" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="null">Uncategorized</SelectItem>
-                      {categories?.map((cat) => (
-                        <SelectItem key={cat.id} value={cat.id.toString()}>{cat.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              ) : (
-                <Button 
-                  type="button" 
-                  variant="outline" 
-                  className="flex-1 h-12 bg-background border-dashed border-border/60 hover:bg-muted/50 text-muted-foreground"
-                  onClick={() => setIsExpanded(true)}
-                >
-                  + Category
-                </Button>
-              )}
-              <Button type="submit" className="h-12 px-6" disabled={createTransaction.isPending || !amount || !merchant}>
-                Add
-              </Button>
-            </div>
-          </div>
+    <form onSubmit={handleSubmit} className="bg-card border border-border/50 rounded-2xl px-4 py-4 space-y-3">
+      <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+        Add spending — {format(new Date(year, month - 1, 1), "MMMM yyyy")}
+      </p>
+      <div className="flex gap-2 flex-wrap sm:flex-nowrap">
+        <div className="relative w-28 shrink-0">
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-mono text-sm">$</span>
+          <Input
+            type="number"
+            step="0.01"
+            placeholder="0.00"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            className="pl-6 font-mono h-10 bg-background border-border/50"
+            required
+          />
         </div>
-      </form>
-    </Card>
+        <Input
+          placeholder="Merchant"
+          value={merchant}
+          onChange={(e) => setMerchant(e.target.value)}
+          className="flex-1 h-10 bg-background border-border/50"
+          required
+        />
+        {showCategory ? (
+          <Select value={categoryId} onValueChange={setCategoryId}>
+            <SelectTrigger className="h-10 w-36 bg-background border-border/50">
+              <SelectValue placeholder="Category" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="null">Uncategorized</SelectItem>
+              {categories?.map((cat) => (
+                <SelectItem key={cat.id} value={cat.id.toString()}>{cat.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        ) : (
+          <Button
+            type="button"
+            variant="outline"
+            className="h-10 text-muted-foreground border-dashed text-sm"
+            onClick={() => setShowCategory(true)}
+          >
+            + Category
+          </Button>
+        )}
+        <Button type="submit" className="h-10 px-5" disabled={createTransaction.isPending || !amount || !merchant}>
+          Add
+        </Button>
+      </div>
+    </form>
   );
 }
 
 export default function Finances() {
-  const currentYear = new Date().getFullYear();
-  const currentMonth = new Date().getMonth() + 1;
-  
+  const now = new Date();
+  const [viewDate, setViewDate] = useState(new Date(now.getFullYear(), now.getMonth(), 1));
+
+  const year = viewDate.getFullYear();
+  const month = viewDate.getMonth() + 1;
+
   const { data: dashboard, isLoading } = useGetBudgetDashboard(
-    { year: currentYear, month: currentMonth },
-    { query: { queryKey: getGetBudgetDashboardQueryKey({ year: currentYear, month: currentMonth }) } }
+    { year, month },
+    { query: { queryKey: getGetBudgetDashboardQueryKey({ year, month }) } }
   );
 
+  const isCurrentMonth = year === now.getFullYear() && month === now.getMonth() + 1;
+
   return (
-    <div className="p-6 md:p-10 max-w-5xl mx-auto space-y-8 animate-in fade-in duration-500">
-      <header className="space-y-6">
-        <div className="flex items-center gap-3">
-          <div className="p-2.5 bg-chart-2/10 rounded-xl text-chart-2">
-            <Wallet className="w-6 h-6" />
-          </div>
-          <h1 className="text-3xl font-serif font-bold text-foreground">Finances</h1>
+    <div className="px-4 pt-5 pb-10 max-w-3xl mx-auto space-y-6">
+      {/* Header row */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Wallet className="w-5 h-5 text-primary" />
+          <h1 className="text-xl font-serif font-bold text-foreground">Finances</h1>
         </div>
-        
-        <TransactionForm />
-      </header>
 
-      <Tabs defaultValue="monthly" className="w-full">
-        <TabsList className="w-full sm:w-auto h-12 p-1 bg-muted/30 rounded-xl border border-border/50 mb-6">
-          <TabsTrigger value="monthly" className="px-8 rounded-lg data-[state=active]:bg-card data-[state=active]:shadow-sm">Monthly Review</TabsTrigger>
-          <TabsTrigger value="annual" className="px-8 rounded-lg data-[state=active]:bg-card data-[state=active]:shadow-sm">Annual Review</TabsTrigger>
-        </TabsList>
+        {/* Month navigation */}
+        <div className="flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8"
+            onClick={() => setViewDate((d) => subMonths(d, 1))}
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </Button>
+          <span className="text-sm font-medium w-28 text-center">
+            {format(viewDate, "MMM yyyy")}
+          </span>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8"
+            onClick={() => setViewDate((d) => addMonths(d, 1))}
+            disabled={isCurrentMonth}
+          >
+            <ChevronRight className="w-4 h-4" />
+          </Button>
+        </div>
+      </div>
 
-        <TabsContent value="monthly" className="space-y-8 mt-0 focus-visible:outline-none focus-visible:ring-0">
-          {isLoading || !dashboard ? (
-            <div className="space-y-6">
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <Skeleton className="h-28 rounded-xl" />
-                <Skeleton className="h-28 rounded-xl" />
-                <Skeleton className="h-28 rounded-xl" />
-                <Skeleton className="h-28 rounded-xl" />
+      {/* Quick add */}
+      <TransactionForm year={year} month={month} />
+
+      {/* Summary strip */}
+      {isLoading || !dashboard ? (
+        <div className="grid grid-cols-4 gap-3">
+          {[1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-20 rounded-xl" />)}
+        </div>
+      ) : (
+        <>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {[
+              { label: "Budgeted", value: fmt(dashboard.totalBudgeted), color: "" },
+              { label: "Rollover", value: fmt(dashboard.totalRollover, true), color: dashboard.totalRollover >= 0 ? "text-primary" : "text-destructive" },
+              { label: "Available", value: fmt(dashboard.totalAvailable), color: "text-primary" },
+              { label: "Left", value: fmt(dashboard.totalLeft), color: dashboard.totalLeft < 0 ? "text-destructive" : "text-secondary" },
+            ].map(({ label, value, color }) => (
+              <div key={label} className="bg-card border border-border/50 rounded-xl px-4 py-3">
+                <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold mb-1">{label}</p>
+                <p className={cn("text-xl font-bold tabular-nums", color)}>{value}</p>
               </div>
-              <Skeleton className="h-64 rounded-xl w-full" />
-            </div>
-          ) : (
-            <>
-              {/* Summary Cards */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <Card className="bg-card shadow-sm border-border/50">
-                  <CardContent className="p-5 flex flex-col justify-center h-full">
-                    <span className="text-sm font-medium text-muted-foreground uppercase tracking-wider mb-1">Budgeted</span>
-                    <span className="text-2xl font-serif font-semibold">${dashboard.totalBudgeted.toFixed(0)}</span>
-                  </CardContent>
-                </Card>
-                <Card className="bg-card shadow-sm border-border/50">
-                  <CardContent className="p-5 flex flex-col justify-center h-full">
-                    <span className="text-sm font-medium text-muted-foreground uppercase tracking-wider mb-1">Available</span>
-                    <span className="text-2xl font-serif font-semibold text-primary">${dashboard.totalAvailable.toFixed(0)}</span>
-                  </CardContent>
-                </Card>
-                <Card className="bg-card shadow-sm border-border/50">
-                  <CardContent className="p-5 flex flex-col justify-center h-full">
-                    <span className="text-sm font-medium text-muted-foreground uppercase tracking-wider mb-1">Spent</span>
-                    <span className="text-2xl font-serif font-semibold">${dashboard.totalSpent.toFixed(0)}</span>
-                  </CardContent>
-                </Card>
-                <Card className="bg-card shadow-sm border-border/50">
-                  <CardContent className="p-5 flex flex-col justify-center h-full">
-                    <span className="text-sm font-medium text-muted-foreground uppercase tracking-wider mb-1">Left</span>
-                    <span className={cn(
-                      "text-2xl font-serif font-semibold",
-                      dashboard.totalLeft < 0 ? "text-destructive" : "text-secondary"
-                    )}>
-                      ${dashboard.totalLeft.toFixed(0)}
-                    </span>
-                  </CardContent>
-                </Card>
-              </div>
-
-              {/* Categories Table */}
-              <Card className="bg-card border-border/50 shadow-sm overflow-hidden">
-                <CardHeader className="bg-muted/20 border-b border-border/50 py-4 px-6">
-                  <CardTitle className="text-base font-medium flex items-center">
-                    <Receipt className="w-4 h-4 mr-2 text-muted-foreground" />
-                    Categories Overview
-                  </CardTitle>
-                </CardHeader>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm text-left">
-                    <thead className="text-xs text-muted-foreground uppercase tracking-wider bg-muted/10">
-                      <tr>
-                        <th className="px-6 py-4 font-medium">Category</th>
-                        <th className="px-6 py-4 font-medium text-right">Available</th>
-                        <th className="px-6 py-4 font-medium text-right">Spent</th>
-                        <th className="px-6 py-4 font-medium text-right">Left</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-border/50">
-                      {dashboard.categories.map((cat, i) => (
-                        <tr key={cat.categoryId} className="hover:bg-muted/10 transition-colors" style={{ animationDelay: `${i * 30}ms` }}>
-                          <td className="px-6 py-4 font-medium text-foreground">{cat.categoryName}</td>
-                          <td className="px-6 py-4 text-right font-mono text-muted-foreground">${cat.available.toFixed(0)}</td>
-                          <td className="px-6 py-4 text-right font-mono">${cat.spent.toFixed(0)}</td>
-                          <td className="px-6 py-4 text-right font-mono">
-                            <span className={cn(
-                              "px-2.5 py-1 rounded-md font-semibold",
-                              cat.left < 0 ? "bg-destructive/10 text-destructive" : 
-                              cat.left === 0 ? "bg-muted/30 text-muted-foreground" : "bg-secondary/10 text-secondary"
-                            )}>
-                              ${cat.left.toFixed(0)}
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </Card>
-            </>
-          )}
-        </TabsContent>
-
-        <TabsContent value="annual" className="mt-0 pt-8 flex items-center justify-center text-muted-foreground focus-visible:outline-none focus-visible:ring-0">
-          <div className="text-center space-y-3 p-12 bg-muted/20 border border-dashed border-border/50 rounded-2xl w-full">
-            <TrendingDown className="w-10 h-10 mx-auto text-muted-foreground/50" />
-            <h3 className="text-lg font-medium text-foreground">Annual Review</h3>
-            <p>This view is under construction.</p>
+            ))}
           </div>
-        </TabsContent>
-      </Tabs>
+
+          {/* Spent progress bar */}
+          <div className="space-y-1">
+            <div className="flex justify-between text-xs text-muted-foreground">
+              <span>{fmt(dashboard.totalSpent)} spent</span>
+              <span>{dashboard.totalAvailable > 0 ? Math.round((dashboard.totalSpent / dashboard.totalAvailable) * 100) : 0}%</span>
+            </div>
+            <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+              <div
+                className={cn(
+                  "h-full rounded-full transition-all duration-500",
+                  dashboard.totalLeft < 0 ? "bg-destructive" : "bg-primary"
+                )}
+                style={{
+                  width: `${dashboard.totalAvailable > 0 ? Math.min(100, (dashboard.totalSpent / dashboard.totalAvailable) * 100) : 0}%`,
+                }}
+              />
+            </div>
+          </div>
+
+          {/* Categories table */}
+          <div className="rounded-2xl border border-border/50 bg-card overflow-hidden">
+            {/* Desktop: full table */}
+            <div className="hidden sm:block overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border/50 bg-muted/20">
+                    <th className="px-5 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Category</th>
+                    <th className="px-4 py-3 text-right text-xs font-semibold text-muted-foreground uppercase tracking-wider">Budgeted</th>
+                    <th className="px-4 py-3 text-right text-xs font-semibold text-muted-foreground uppercase tracking-wider">Rollover</th>
+                    <th className="px-4 py-3 text-right text-xs font-semibold text-muted-foreground uppercase tracking-wider">Available</th>
+                    <th className="px-4 py-3 text-right text-xs font-semibold text-muted-foreground uppercase tracking-wider">Spent</th>
+                    <th className="px-4 py-3 text-right text-xs font-semibold text-muted-foreground uppercase tracking-wider">Left</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/40">
+                  {dashboard.categories.map((cat) => (
+                    <tr key={cat.categoryId} className="hover:bg-muted/10 transition-colors">
+                      <td className="px-5 py-3.5 font-medium text-foreground">{cat.categoryName}</td>
+                      <td className="px-4 py-3.5 text-right tabular-nums text-muted-foreground">{fmt(cat.budgeted)}</td>
+                      <td className={cn(
+                        "px-4 py-3.5 text-right tabular-nums font-medium",
+                        cat.rollover > 0 ? "text-primary" : cat.rollover < 0 ? "text-destructive" : "text-muted-foreground"
+                      )}>
+                        {fmt(cat.rollover, true)}
+                      </td>
+                      <td className="px-4 py-3.5 text-right tabular-nums text-foreground">{fmt(cat.available)}</td>
+                      <td className="px-4 py-3.5 text-right tabular-nums text-foreground">{fmt(cat.spent)}</td>
+                      <td className="px-4 py-3.5 text-right">
+                        <span className={cn(
+                          "inline-block tabular-nums px-2 py-0.5 rounded-md font-semibold text-sm",
+                          cat.left < 0
+                            ? "bg-destructive/10 text-destructive"
+                            : cat.left === 0
+                            ? "bg-muted/30 text-muted-foreground"
+                            : "bg-primary/10 text-primary"
+                        )}>
+                          {fmt(cat.left)}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr className="border-t border-border/50 bg-muted/10">
+                    <td className="px-5 py-3 font-semibold text-foreground text-sm">Total</td>
+                    <td className="px-4 py-3 text-right tabular-nums font-semibold">{fmt(dashboard.totalBudgeted)}</td>
+                    <td className={cn(
+                      "px-4 py-3 text-right tabular-nums font-semibold",
+                      dashboard.totalRollover >= 0 ? "text-primary" : "text-destructive"
+                    )}>
+                      {fmt(dashboard.totalRollover, true)}
+                    </td>
+                    <td className="px-4 py-3 text-right tabular-nums font-semibold text-primary">{fmt(dashboard.totalAvailable)}</td>
+                    <td className="px-4 py-3 text-right tabular-nums font-semibold">{fmt(dashboard.totalSpent)}</td>
+                    <td className="px-4 py-3 text-right">
+                      <span className={cn(
+                        "inline-block tabular-nums px-2 py-0.5 rounded-md font-bold text-sm",
+                        dashboard.totalLeft < 0
+                          ? "bg-destructive/10 text-destructive"
+                          : "bg-primary/10 text-primary"
+                      )}>
+                        {fmt(dashboard.totalLeft)}
+                      </span>
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+
+            {/* Mobile: card list */}
+            <div className="sm:hidden divide-y divide-border/40">
+              {dashboard.categories.map((cat) => (
+                <div key={cat.categoryId} className="px-4 py-3.5 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="font-medium text-foreground">{cat.categoryName}</span>
+                    <span className={cn(
+                      "tabular-nums px-2 py-0.5 rounded-md font-semibold text-sm",
+                      cat.left < 0
+                        ? "bg-destructive/10 text-destructive"
+                        : cat.left === 0
+                        ? "bg-muted/30 text-muted-foreground"
+                        : "bg-primary/10 text-primary"
+                    )}>
+                      {fmt(cat.left)} left
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                    <span>Budget <span className="text-foreground font-medium">{fmt(cat.budgeted)}</span></span>
+                    <span className={cn(
+                      "font-medium",
+                      cat.rollover > 0 ? "text-primary" : cat.rollover < 0 ? "text-destructive" : ""
+                    )}>
+                      {cat.rollover !== 0 && <>Rollover {fmt(cat.rollover, true)}</>}
+                    </span>
+                    <span>Spent <span className="text-foreground font-medium">{fmt(cat.spent)}</span></span>
+                  </div>
+                  {/* Mini progress */}
+                  <div className="h-1 bg-muted rounded-full overflow-hidden">
+                    <div
+                      className={cn("h-full rounded-full", cat.left < 0 ? "bg-destructive" : "bg-primary")}
+                      style={{ width: `${cat.available > 0 ? Math.min(100, (cat.spent / cat.available) * 100) : 0}%` }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Recent transactions for this month */}
+          {dashboard.recentTransactions.length > 0 && (
+            <div className="space-y-2">
+              <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Transactions — {format(viewDate, "MMMM")}
+              </h2>
+              <div className="divide-y divide-border/40 rounded-2xl border border-border/50 bg-card overflow-hidden">
+                {dashboard.recentTransactions.map((tx) => (
+                  <div key={tx.id} className="flex items-center justify-between px-4 py-3 hover:bg-muted/20 transition-colors">
+                    <div className="flex flex-col min-w-0">
+                      <span className="text-sm font-medium text-foreground truncate">{tx.merchant}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {format(new Date(tx.date + "T00:00:00"), "MMM d")}
+                        {tx.categoryName ? ` · ${tx.categoryName}` : ""}
+                      </span>
+                    </div>
+                    <span className="text-sm font-semibold tabular-nums text-foreground ml-4 shrink-0">
+                      {fmt(tx.amount)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }

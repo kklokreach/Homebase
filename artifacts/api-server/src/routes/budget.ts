@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, or, lt, sql } from "drizzle-orm";
 import { db, budgetCategoriesTable, monthlyBudgetsTable, transactionsTable } from "@workspace/db";
 import {
   CreateBudgetCategoryBody,
@@ -275,6 +275,74 @@ router.delete("/transactions/:id", async (req, res): Promise<void> => {
 
 // ── Budget Dashboard ──────────────────────────────────────────────────────
 
+/**
+ * Compute per-category rollover by chaining all prior months.
+ *
+ * Algorithm (per category):
+ *  1. Gather every month-budget row that predates the requested month,
+ *     sorted chronologically.
+ *  2. Walk through them in order, tracking a running "left" balance.
+ *     Each month: available = budgeted + runningLeft ; left = available - spent.
+ *  3. The final runningLeft after processing all prior months becomes the
+ *     rollover for the requested month.
+ *
+ * This ensures Feb surplus → Mar available → Mar surplus → Apr available, etc.
+ */
+async function computeRollovers(
+  categories: { id: number }[],
+  year: number,
+  month: number,
+): Promise<Map<number, number>> {
+  // All budget rows strictly before the requested month
+  const priorBudgets = await db
+    .select()
+    .from(monthlyBudgetsTable)
+    .where(
+      or(
+        lt(monthlyBudgetsTable.year, year),
+        and(
+          eq(monthlyBudgetsTable.year, year),
+          lt(monthlyBudgetsTable.month, month),
+        ),
+      ),
+    );
+
+  if (priorBudgets.length === 0) {
+    return new Map(categories.map((c) => [c.id, 0]));
+  }
+
+  // All transactions strictly before the requested month
+  const monthStr = String(month).padStart(2, "0");
+  const cutoff = `${year}-${monthStr}`;
+  const priorTxns = await db
+    .select()
+    .from(transactionsTable)
+    .where(sql`${transactionsTable.date} < ${cutoff}`);
+
+  const rollovers = new Map<number, number>();
+
+  for (const cat of categories) {
+    const catBudgets = priorBudgets
+      .filter((b) => b.categoryId === cat.id)
+      .sort((a, b) => a.year !== b.year ? a.year - b.year : a.month - b.month);
+
+    let runningLeft = 0;
+    for (const b of catBudgets) {
+      const ms = String(b.month).padStart(2, "0");
+      const prefix = `${b.year}-${ms}`;
+      const spent = priorTxns
+        .filter((t) => t.categoryId === cat.id && t.date.startsWith(prefix))
+        .reduce((sum, t) => sum + Number(t.amount), 0);
+      const available = Number(b.budgetAmount) + runningLeft;
+      runningLeft = available - spent;
+    }
+
+    rollovers.set(cat.id, runningLeft);
+  }
+
+  return rollovers;
+}
+
 router.get("/budget/dashboard", async (req, res): Promise<void> => {
   const parsed = GetBudgetDashboardQueryParams.safeParse(req.query);
   if (!parsed.success) {
@@ -303,22 +371,8 @@ router.get("/budget/dashboard", async (req, res): Promise<void> => {
     .from(transactionsTable)
     .where(sql`${transactionsTable.date} LIKE ${prefix + "%"}`);
 
-  // Compute previous month rollover
-  const { year: prevYear, month: prevMonth } = month === 1
-    ? { year: year - 1, month: 12 }
-    : { year, month: month - 1 };
-
-  const prevBudgets = await db
-    .select()
-    .from(monthlyBudgetsTable)
-    .where(and(eq(monthlyBudgetsTable.year, prevYear), eq(monthlyBudgetsTable.month, prevMonth)));
-
-  const prevMonthStr = String(prevMonth).padStart(2, "0");
-  const prevPrefix = `${prevYear}-${prevMonthStr}`;
-  const prevTxns = await db
-    .select()
-    .from(transactionsTable)
-    .where(sql`${transactionsTable.date} LIKE ${prevPrefix + "%"}`);
+  // Full chain rollover for every category
+  const rollovers = await computeRollovers(categories, year, month);
 
   const lines = categories.map((cat) => {
     const budgetEntry = monthlyBudgets.find((b) => b.categoryId === cat.id);
@@ -327,13 +381,7 @@ router.get("/budget/dashboard", async (req, res): Promise<void> => {
       .filter((t) => t.categoryId === cat.id)
       .reduce((sum, t) => sum + Number(t.amount), 0);
 
-    const prevBudgetEntry = prevBudgets.find((b) => b.categoryId === cat.id);
-    const prevBudgeted = Number(prevBudgetEntry?.budgetAmount ?? 0);
-    const prevSpent = prevTxns
-      .filter((t) => t.categoryId === cat.id)
-      .reduce((sum, t) => sum + Number(t.amount), 0);
-
-    const rollover = prevBudgeted - prevSpent;
+    const rollover = rollovers.get(cat.id) ?? 0;
     const available = budgeted + rollover;
     const left = available - spent;
 
@@ -468,10 +516,11 @@ router.get("/home/snapshot", async (_req, res): Promise<void> => {
   const wife = tasks.filter((t) => t.assignee === "wife").map(serializeTask);
   const shared = tasks.filter((t) => t.assignee === "us").map(serializeTask);
 
-  // Budget snapshot
+  // Budget snapshot — uses full chain rollover just like the dashboard
   const monthStr = String(month).padStart(2, "0");
   const prefix = `${year}-${monthStr}`;
 
+  const categories = await db.select().from(budgetCategoriesTable);
   const budgets = await db.select().from(monthlyBudgetsTable).where(
     and(eq(monthlyBudgetsTable.year, year), eq(monthlyBudgetsTable.month, month)),
   );
@@ -479,10 +528,12 @@ router.get("/home/snapshot", async (_req, res): Promise<void> => {
     sql`${transactionsTable.date} LIKE ${prefix + "%"}`,
   );
 
+  const snapshotRollovers = await computeRollovers(categories, year, month);
   const totalBudgeted = budgets.reduce((s, b) => s + Number(b.budgetAmount), 0);
+  const totalRollover = Array.from(snapshotRollovers.values()).reduce((s, v) => s + v, 0);
   const totalSpent = txns.reduce((s, t) => s + Number(t.amount), 0);
-  const totalAvailable = totalBudgeted;
-  const totalLeft = totalBudgeted - totalSpent;
+  const totalAvailable = totalBudgeted + totalRollover;
+  const totalLeft = totalAvailable - totalSpent;
 
   // Recent transactions
   const recentTxns = await db
