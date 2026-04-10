@@ -1,0 +1,160 @@
+Build a responsive full-stack web app called Homebase for a shared household with two adults.
+
+Core goal:
+Create a fast, flexible, low-friction household organizer for daily life. The app should feel lightweight and easy to use on both mobile and desktop. Prioritize speed of entry over complexity.
+
+Household structure:
+- Two adult users with separate accounts
+- One shared household
+- Shared household data for tasks, budgets, finance reports, notes, and household organization
+- Personal calendar connections for each user
+- Tasks can be assigned to Me, Wife, or Shared
+
+Main app sections:
+- Home
+- Tasks
+- Calendar
+- Finances
+- Notes
+- Settings
+
+UX rules:
+- Optimize for quick capture and minimal friction
+- Do not require tags
+- Do not require category, priority, or due date when creating a task
+- Use progressive disclosure so extra fields only appear when needed
+- Keep forms minimal and mobile-first
+- Make common actions possible directly from the home screen
+- Clean, minimal, modern UI
+- Responsive design that works well on phone and desktop
+
+Authentication:
+- Use app-specific authentication, not shared login
+- Each adult should have their own account
+- Both users belong to the same household
+- Support email sign-in for now
+- Structure the app so Google sign-in can be added later
+
+Tasks:
+- Quick-add task with title only
+- Optional assignee: Me, Wife, or Shared
+- Optional due date
+- Optional recurring rule
+- Optional notes
+- Optional category
+- Fast complete, edit, and delete actions
+- Views: Today, Upcoming, Mine, Wife, Shared
+- Recurring tasks for household chores and regular responsibilities
+- Categories can include Child, House, Finance, Admin, Errands, Personal, but category should never be required
+
+Calendar:
+- Include a calendar/agenda section
+- Design the data model and UI to support Google Calendar integration for each adult
+- For now, build the calendar UI with mock or placeholder events first if needed
+- The final structure should support read-only Google Calendar sync for each user
+- Show today’s appointments and this week’s appointments
+- Include a shared family agenda view that combines appointments and tasks
+
+Finances:
+- Support monthly budget categories such as Groceries, Restaurants, Gas, Household, Child, Bills, Shopping, Misc
+- Let the user set a monthly budget amount for each category
+- Every budget category should support automatic rollover month to month
+- If a category is under budget, the remaining amount carries into the next month
+- If a category is over budget, the negative balance carries into the next month
+- Each budget category should show:
+  - Budgeted
+  - Rollover
+  - Available
+  - Spent
+  - Left
+- Show a top-level monthly summary with:
+  - Total budgeted
+  - Total rollover
+  - Total available
+  - Total spent
+  - Total left
+- Transaction entry should be fast:
+  - amount
+  - merchant/title
+  - optional category
+  - optional date
+  - optional note
+- Keep categories limited and stable so entry stays easy
+- Include monthly review and annual review screens
+- Include charts and summaries for:
+  - This month
+  - Last month
+  - This year
+  - Last year
+  - Spending by category
+  - Month-to-month trends
+  - Annual comparison
+- Include recurring bills/subscriptions
+
+Notes:
+- Add a shared notes section visible and editable by both adults
+- Notes should support:
+  - title
+  - body
+  - optional category
+  - pinned status
+  - last updated date
+  - updated by
+- Categories can include Family, Child, House, Finance, Planning, Misc, but category should never be required
+- Include views for:
+  - Pinned Notes
+  - Recent Notes
+  - All Notes
+- Add search for notes
+- Show pinned notes on the home dashboard
+
+Optional personal tracking:
+- Include lightweight personal habits and daily check-ins
+- Keep these simple and secondary to the household functionality
+- Each adult can track:
+  - mood
+  - energy
+  - short daily note
+  - simple habits with daily completion
+- Keep this fast and minimal, not clinical or overcomplicated
+
+Home dashboard:
+Show a clean, easy-to-scan home screen with:
+- My tasks today
+- Wife’s tasks today
+- Shared tasks
+- Today’s appointments
+- This week’s appointments
+- Budget snapshot for the current month
+- Recent transactions
+- Pinned notes
+- Quick-add task input always visible
+- Fast access to common actions
+
+Technical requirements:
+- Use a PostgreSQL database
+- Build as a responsive web app
+- Seed sample household data so the app feels real immediately
+- Seed sample users, tasks, recurring tasks, notes, budget categories, monthly budgets, prior-month rollover data, transactions, and mock calendar events
+- Structure the code cleanly so Google Calendar integration can be added next
+- Use a maintainable full-stack architecture
+
+Important implementation priorities:
+1. Build the core app flows first
+2. Make task entry and finance tracking feel fast and easy
+3. Implement rollover budget logic carefully and correctly
+4. Keep the UI uncluttered
+5. Start with a single shared household model
+6. Make the app usable immediately with sample data
+7. Do not over-engineer advanced features before the core experience works
+
+Please generate:
+- the full app structure
+- database schema
+- seeded sample data
+- responsive UI
+- core routes/pages/components
+- working task system
+- working finance system with rollover budgets
+- shared notes system
+- placeholder calendar UI ready for later Google Calendar integration
