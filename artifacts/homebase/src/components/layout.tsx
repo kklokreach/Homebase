@@ -1,12 +1,13 @@
 import { ReactNode } from "react";
 import { Link, useLocation } from "wouter";
-import { CheckSquare, Home, PieChart, Settings } from "lucide-react";
+import { CalendarDays, CheckSquare, Home, PieChart, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const NAV_ITEMS = [
   { path: "/", label: "Homebase", icon: Home },
   { path: "/tasks", label: "Tasks", icon: CheckSquare },
   { path: "/finances", label: "Finances", icon: PieChart },
+  { path: "/calendar", label: "Calendar", icon: CalendarDays },
   { path: "/settings", label: "Settings", icon: Settings },
 ];
 
