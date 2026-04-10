@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { format, addMonths, subMonths } from "date-fns";
-import { ChevronLeft, ChevronRight, Plus, Wallet } from "lucide-react";
+import { ChevronLeft, ChevronRight, Wallet } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useGetBudgetDashboard,
@@ -12,11 +12,11 @@ import {
 } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+
+const LAST_CATEGORY_KEY = "homebase:lastCategoryId";
 
 function fmt(n: number, showSign = false) {
   const abs = Math.abs(n).toLocaleString("en-US", {
@@ -30,25 +30,42 @@ function fmt(n: number, showSign = false) {
 }
 
 function TransactionForm({ year, month }: { year: number; month: number }) {
+  const savedCat = localStorage.getItem(LAST_CATEGORY_KEY) ?? "null";
   const [amount, setAmount] = useState("");
   const [merchant, setMerchant] = useState("");
-  const [categoryId, setCategoryId] = useState<string>("null");
-  const [showCategory, setShowCategory] = useState(false);
+  const [categoryId, setCategoryId] = useState<string>(savedCat);
+  const [justAdded, setJustAdded] = useState(false);
+  const amountRef = useRef<HTMLInputElement>(null);
+  const chipRowRef = useRef<HTMLDivElement>(null);
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { data: categories } = useListBudgetCategories();
   const createTransaction = useCreateTransaction();
 
+  // Scroll the selected chip into view whenever categoryId changes
+  useEffect(() => {
+    const row = chipRowRef.current;
+    if (!row) return;
+    const active = row.querySelector<HTMLElement>("[data-active='true']");
+    active?.scrollIntoView({ inline: "center", block: "nearest", behavior: "smooth" });
+  }, [categoryId, categories]);
+
+  const handleCategorySelect = (id: string) => {
+    setCategoryId(id);
+    localStorage.setItem(LAST_CATEGORY_KEY, id);
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!amount || !merchant || isNaN(Number(amount))) return;
+    const parsed = parseFloat(amount);
+    if (!parsed || !merchant.trim()) return;
 
     createTransaction.mutate(
       {
         data: {
-          amount: Number(amount),
-          merchant,
+          amount: parsed,
+          merchant: merchant.trim(),
           categoryId: categoryId === "null" ? null : Number(categoryId),
         },
       },
@@ -56,9 +73,10 @@ function TransactionForm({ year, month }: { year: number; month: number }) {
         onSuccess: () => {
           setAmount("");
           setMerchant("");
-          setCategoryId("null");
-          setShowCategory(false);
-          toast({ title: "Transaction added" });
+          // Keep categoryId — user likely adding more of same type
+          setJustAdded(true);
+          setTimeout(() => setJustAdded(false), 1200);
+          amountRef.current?.focus();
           queryClient.invalidateQueries({ queryKey: getGetBudgetDashboardQueryKey() });
           queryClient.invalidateQueries({ queryKey: getListTransactionsQueryKey() });
           queryClient.invalidateQueries({ queryKey: getGetHomeSnapshotQueryKey() });
@@ -71,55 +89,86 @@ function TransactionForm({ year, month }: { year: number; month: number }) {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="bg-card border border-border/50 rounded-2xl px-4 py-4 space-y-3">
-      <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-        Add spending — {format(new Date(year, month - 1, 1), "MMMM yyyy")}
-      </p>
-      <div className="flex gap-2 flex-wrap sm:flex-nowrap">
-        <div className="relative w-28 shrink-0">
-          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-mono text-sm">$</span>
-          <Input
-            type="number"
-            step="0.01"
+    <form onSubmit={handleSubmit} className="bg-card border border-border/50 rounded-2xl overflow-hidden">
+      {/* Amount + merchant row */}
+      <div className="flex items-center gap-0 border-b border-border/40">
+        {/* Amount — large, numeric keyboard on mobile */}
+        <div className="relative flex items-center shrink-0">
+          <span className="pl-4 pr-1 text-lg font-mono text-muted-foreground select-none">$</span>
+          <input
+            ref={amountRef}
+            type="text"
+            inputMode="decimal"
+            pattern="[0-9]*\.?[0-9]*"
             placeholder="0.00"
             value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            className="pl-6 font-mono h-10 bg-background border-border/50"
-            required
+            onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, ""))}
+            className="w-24 h-14 text-lg font-mono font-semibold bg-transparent border-0 outline-none placeholder:text-muted-foreground/40 text-foreground pr-2"
+            autoComplete="off"
           />
         </div>
-        <Input
-          placeholder="Merchant"
+        <div className="w-px h-8 bg-border/50 shrink-0" />
+        {/* Merchant */}
+        <input
+          type="text"
+          placeholder="Where?"
           value={merchant}
           onChange={(e) => setMerchant(e.target.value)}
-          className="flex-1 h-10 bg-background border-border/50"
-          required
+          className="flex-1 h-14 px-4 bg-transparent border-0 outline-none placeholder:text-muted-foreground/40 text-foreground text-base"
+          autoComplete="off"
         />
-        {showCategory ? (
-          <Select value={categoryId} onValueChange={setCategoryId}>
-            <SelectTrigger className="h-10 w-36 bg-background border-border/50">
-              <SelectValue placeholder="Category" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="null">Uncategorized</SelectItem>
-              {categories?.map((cat) => (
-                <SelectItem key={cat.id} value={cat.id.toString()}>{cat.name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        ) : (
-          <Button
+        {/* Submit */}
+        <button
+          type="submit"
+          disabled={!parseFloat(amount) || !merchant.trim() || createTransaction.isPending}
+          className={cn(
+            "shrink-0 h-14 px-5 font-semibold text-sm transition-all duration-200",
+            justAdded
+              ? "bg-primary/20 text-primary"
+              : parseFloat(amount) && merchant.trim()
+              ? "bg-primary text-primary-foreground hover:bg-primary/90 active:scale-95"
+              : "text-muted-foreground/40 cursor-not-allowed"
+          )}
+        >
+          {justAdded ? "✓" : "Add"}
+        </button>
+      </div>
+
+      {/* Category chips — always visible, horizontal scroll */}
+      <div
+        ref={chipRowRef}
+        className="flex gap-2 px-3 py-2.5 overflow-x-auto scrollbar-none"
+        style={{ scrollbarWidth: "none" }}
+      >
+        <button
+          type="button"
+          data-active={categoryId === "null"}
+          onClick={() => handleCategorySelect("null")}
+          className={cn(
+            "shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-all whitespace-nowrap border",
+            categoryId === "null"
+              ? "bg-muted text-foreground border-border"
+              : "text-muted-foreground border-border/50 hover:border-border hover:text-foreground"
+          )}
+        >
+          No category
+        </button>
+        {categories?.map((cat) => (
+          <button
+            key={cat.id}
             type="button"
-            variant="outline"
-            className="h-10 text-muted-foreground border-dashed text-sm"
-            onClick={() => setShowCategory(true)}
+            data-active={categoryId === cat.id.toString()}
+            onClick={() => handleCategorySelect(cat.id.toString())}
+            className={cn(
+              "shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-all whitespace-nowrap border",
+              categoryId === cat.id.toString()
+                ? "bg-primary text-primary-foreground border-primary"
+                : "text-muted-foreground border-border/50 hover:border-primary/50 hover:text-foreground"
+            )}
           >
-            + Category
-          </Button>
-        )}
-        <Button type="submit" className="h-10 px-5" disabled={createTransaction.isPending || !amount || !merchant}>
-          Add
-        </Button>
+            {cat.name}
+          </button>
+        ))}
       </div>
     </form>
   );
