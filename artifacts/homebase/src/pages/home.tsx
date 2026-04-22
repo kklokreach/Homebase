@@ -11,7 +11,7 @@ function fmt(n: number) {
 }
 
 export default function Home() {
-  const { data: snapshot, isLoading } = useGetHomeSnapshot({
+  const { data: snapshot, isLoading, error } = useGetHomeSnapshot({
     query: { queryKey: getGetHomeSnapshotQueryKey() },
   });
 
@@ -30,7 +30,8 @@ export default function Home() {
     );
   }
 
-  if (!snapshot) return null;
+  if (error) return <div className="px-4 pt-5 max-w-2xl mx-auto text-sm text-destructive">Could not load Homebase. Check that the API is up and DATABASE_URL is set on Render.</div>;
+if (!snapshot) return <div className="px-4 pt-5 max-w-2xl mx-auto text-sm text-muted-foreground">No home data returned yet.</div>;
 
   const { todayTasks, budgetSnapshot, recentTransactions } = snapshot;
   const left = budgetSnapshot.totalLeft;

@@ -205,7 +205,7 @@ router.post("/transactions", async (req, res): Promise<void> => {
       amount: String(parsed.data.amount),
       merchant: parsed.data.merchant,
       categoryId: parsed.data.categoryId ?? null,
-      date: parsed.data.date ?? today,
+      date: parsed.data.date ? parsed.data.date.toISOString().slice(0, 10) : today,
       notes: parsed.data.notes ?? null,
     })
     .returning();
@@ -240,7 +240,7 @@ router.put("/transactions/:id", async (req, res): Promise<void> => {
   if (d.amount !== undefined) updates.amount = String(d.amount);
   if (d.merchant !== undefined) updates.merchant = d.merchant;
   if ("categoryId" in d) updates.categoryId = d.categoryId ?? null;
-  if (d.date !== undefined) updates.date = d.date;
+  if (d.date !== undefined) updates.date = d.date.toISOString().slice(0, 10);
   if ("notes" in d) updates.notes = d.notes ?? null;
 
   await db.update(transactionsTable).set(updates).where(eq(transactionsTable.id, id));

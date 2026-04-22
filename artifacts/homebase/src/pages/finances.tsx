@@ -15,7 +15,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
-const API_BASE_URL = "https://homebase-ll6f.onrender.com/api";
+const API_ORIGIN = (import.meta.env.VITE_API_BASE_URL ?? "https://homebase-ll6f.onrender.com").replace(/\/api\/?$/, "").replace(/\/$/, "");
+const API_BASE_URL = API_ORIGIN + "/api";
 const LAST_CATEGORY_KEY = "homebase:lastCategoryId";
 
 type Category = {

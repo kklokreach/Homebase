@@ -81,7 +81,7 @@ router.post("/tasks", async (req, res): Promise<void> => {
     .values({
       title: parsed.data.title,
       assignee: parsed.data.assignee ?? null,
-      dueDate: parsed.data.dueDate ?? null,
+      dueDate: parsed.data.dueDate ? parsed.data.dueDate.toISOString().slice(0, 10) : null,
       recurring: parsed.data.recurring ?? null,
       notes: parsed.data.notes ?? null,
       category: parsed.data.category ?? null,
@@ -150,7 +150,7 @@ router.put("/tasks/:id", async (req, res): Promise<void> => {
   const d = parsed.data;
   if (d.title !== undefined) updates.title = d.title;
   if ("assignee" in d) updates.assignee = d.assignee ?? null;
-  if ("dueDate" in d) updates.dueDate = d.dueDate ?? null;
+  if ("dueDate" in d) updates.dueDate = d.dueDate ? d.dueDate.toISOString().slice(0, 10) : null;
   if ("recurring" in d) updates.recurring = d.recurring ?? null;
   if ("notes" in d) updates.notes = d.notes ?? null;
   if ("category" in d) updates.category = d.category ?? null;
