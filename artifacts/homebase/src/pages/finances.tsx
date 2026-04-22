@@ -239,7 +239,7 @@ export default function Finances() {
       amount: String(tx.amount),
       merchant: tx.merchant,
       categoryId: tx.categoryId == null ? "null" : String(tx.categoryId),
-      date: tx.date,
+      date: String(tx.date).slice(0, 10),
       notes: tx.notes ?? "",
     });
   }
@@ -444,7 +444,7 @@ export default function Finances() {
                       <div className="min-w-0">
                         <div className="font-medium">{tx.merchant}</div>
                         <div className="text-sm text-muted-foreground">
-                          {format(new Date(`${tx.date}T00:00:00`), "MMM d, yyyy")}
+                          {format(new Date(tx.date), "MMM d, yyyy")}
                           {tx.categoryName ? ` · ${tx.categoryName}` : ""}
                           {tx.notes ? ` · ${tx.notes}` : ""}
                         </div>
