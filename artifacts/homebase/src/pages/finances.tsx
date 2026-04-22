@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { format, addMonths, subMonths } from "date-fns";
-import { ChevronLeft, ChevronRight, Pencil, Save, Trash2, Wallet, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Pencil, Save, Trash2, X } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useGetBudgetDashboard,
@@ -78,7 +78,11 @@ function TransactionForm({
   month: number;
   onSaved: () => void;
 }) {
-  const savedCat = typeof window !== "undefined" ? localStorage.getItem(LAST_CATEGORY_KEY) ?? "null" : "null";
+  const savedCat =
+    typeof window !== "undefined"
+      ? localStorage.getItem(LAST_CATEGORY_KEY) ?? "null"
+      : "null";
+
   const [amount, setAmount] = useState("");
   const [merchant, setMerchant] = useState("");
   const [categoryId, setCategoryId] = useState(savedCat);
@@ -101,7 +105,9 @@ function TransactionForm({
           merchant: merchant.trim(),
           categoryId: categoryId === "null" ? null : Number(categoryId),
           notes: notes.trim() || null,
-          date: `${year}-${String(month).padStart(2, "0")}-${String(new Date().getDate()).padStart(2, "0")}`,
+          date: `${year}-${String(month).padStart(2, "0")}-${String(
+            new Date().getDate()
+          ).padStart(2, "0")}`,
         }),
       });
 
@@ -165,18 +171,10 @@ function TransactionForm({
 export default function Finances() {
   const now = new Date();
   const [viewDate, setViewDate] = useState(new Date(now.getFullYear(), now.getMonth(), 1));
-  const [budgetDrafts, setBudgetDrafts] = useState<Record<number, string>>({});
-  const [savingBudgetId, setSavingBudgetId] = useState<number | null>(null);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [txLoading, setTxLoading] = useState(false);
   const [editingTxId, setEditingTxId] = useState<number | null>(null);
-  const [txDraft, setTxDraft] = useState<{
-    amount: string;
-    merchant: string;
-    categoryId: string;
-    date: string;
-    notes: string;
-  }>({
+  const [txDraft, setTxDraft] = useState({
     amount: "",
     merchant: "",
     categoryId: "null",
@@ -190,10 +188,12 @@ export default function Finances() {
 
   const queryClient = useQueryClient();
   const { toast } = useToast();
+
   const { data: dashboard, isLoading } = useGetBudgetDashboard(
     { year, month },
     { query: { queryKey: getGetBudgetDashboardQueryKey({ year, month }) } }
   );
+
   const { data: categories = [] } = useListBudgetCategories();
 
   async function refreshTransactions() {
@@ -211,7 +211,9 @@ export default function Finances() {
   }
 
   function refreshAll() {
-    queryClient.invalidateQueries({ queryKey: getGetBudgetDashboardQueryKey({ year, month }) });
+    queryClient.invalidateQueries({
+      queryKey: getGetBudgetDashboardQueryKey({ year, month }),
+    });
     queryClient.invalidateQueries({ queryKey: getListTransactionsQueryKey() });
     queryClient.invalidateQueries({ queryKey: getGetHomeSnapshotQueryKey() });
     refreshTransactions();
@@ -220,39 +222,6 @@ export default function Finances() {
   useEffect(() => {
     refreshTransactions();
   }, [year, month]);
-
-  useEffect(() => {
-    if (!dashboard) return;
-    const next: Record<number, string> = {};
-    for (const cat of dashboard.categories) {
-      next[cat.categoryId] = String(cat.budgeted ?? 0);
-    }
-    setBudgetDrafts(next);
-  }, [dashboard]);
-
-  async function saveBudget(categoryId: number) {
-    const raw = budgetDrafts[categoryId] ?? "0";
-    const budgetAmount = parseFloat(raw || "0") || 0;
-
-    try {
-      setSavingBudgetId(categoryId);
-      await api("/budget/monthly", {
-        method: "POST",
-        body: JSON.stringify({
-          categoryId,
-          year,
-          month,
-          budgetAmount,
-        }),
-      });
-      refreshAll();
-      toast({ title: "Budget updated" });
-    } catch {
-      toast({ title: "Failed to update budget", variant: "destructive" });
-    } finally {
-      setSavingBudgetId(null);
-    }
-  }
 
   function startEditTx(tx: Transaction) {
     setEditingTxId(tx.id);
@@ -306,7 +275,7 @@ export default function Finances() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3">
         <h1 className="text-2xl font-semibold">Finances</h1>
 
         <div className="flex items-center gap-2">
@@ -334,90 +303,33 @@ export default function Finances() {
           ))}
         </div>
       ) : (
-        <>
-          <div className="grid gap-3 md:grid-cols-4">
-            {[
-              { label: "Budgeted", value: fmt(dashboard.totalBudgeted), color: "" },
-              {
-                label: "Rollover",
-                value: fmt(dashboard.totalRollover, true),
-                color: dashboard.totalRollover >= 0 ? "text-primary" : "text-destructive",
-              },
-              { label: "Available", value: fmt(dashboard.totalAvailable), color: "text-primary" },
-              {
-                label: "Left",
-                value: fmt(dashboard.totalLeft),
-                color: dashboard.totalLeft < 0 ? "text-destructive" : "text-secondary",
-              },
-            ].map(({ label, value, color }) => (
-              <div key={label} className="rounded-2xl border bg-card p-4 shadow-sm">
-                <div className="text-sm text-muted-foreground">{label}</div>
-                <div className={cn("mt-2 text-2xl font-semibold", color)}>{value}</div>
-              </div>
-            ))}
-          </div>
-
-          <div className="rounded-2xl border bg-card p-4 shadow-sm space-y-3">
-            <div className="flex items-center gap-2">
-              <Wallet className="h-4 w-4" />
-              <div className="font-medium">Budget categories</div>
+        <div className="grid gap-3 md:grid-cols-4">
+          {[
+            { label: "Budgeted", value: fmt(dashboard.totalBudgeted), color: "" },
+            {
+              label: "Rollover",
+              value: fmt(dashboard.totalRollover, true),
+              color:
+                dashboard.totalRollover >= 0 ? "text-primary" : "text-destructive",
+            },
+            {
+              label: "Available",
+              value: fmt(dashboard.totalAvailable),
+              color: "text-primary",
+            },
+            {
+              label: "Left",
+              value: fmt(dashboard.totalLeft),
+              color:
+                dashboard.totalLeft < 0 ? "text-destructive" : "text-secondary",
+            },
+          ].map(({ label, value, color }) => (
+            <div key={label} className="rounded-2xl border bg-card p-4 shadow-sm">
+              <div className="text-sm text-muted-foreground">{label}</div>
+              <div className={cn("mt-2 text-2xl font-semibold", color)}>{value}</div>
             </div>
-
-            <div className="space-y-3">
-              {dashboard.categories.map((cat) => (
-                <div key={cat.categoryId} className="rounded-xl border p-3 space-y-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <div className="font-medium">{cat.categoryName}</div>
-                      <div className="text-sm text-muted-foreground">
-                        Available {fmt(cat.available)} · Spent {fmt(cat.spent)} · Left {fmt(cat.left)}
-                      </div>
-                    </div>
-                    <div
-                      className={cn(
-                        "text-sm font-medium",
-                        cat.rollover > 0 ? "text-primary" : cat.rollover < 0 ? "text-destructive" : "text-muted-foreground"
-                      )}
-                    >
-                      Rollover {fmt(cat.rollover, true)}
-                    </div>
-                  </div>
-
-                  <div className="flex flex-col gap-2 md:flex-row md:items-center">
-                    <div className="text-sm text-muted-foreground md:w-28">Budget amount</div>
-                    <Input
-                      inputMode="decimal"
-                      value={budgetDrafts[cat.categoryId] ?? ""}
-                      onChange={(e) =>
-                        setBudgetDrafts((prev) => ({
-                          ...prev,
-                          [cat.categoryId]: e.target.value.replace(/[^0-9.]/g, ""),
-                        }))
-                      }
-                      className="md:w-40"
-                    />
-                    <Button
-                      onClick={() => saveBudget(cat.categoryId)}
-                      disabled={savingBudgetId === cat.categoryId}
-                    >
-                      <Save className="mr-2 h-4 w-4" />
-                      {savingBudgetId === cat.categoryId ? "Saving..." : "Save"}
-                    </Button>
-                  </div>
-
-                  <div className="h-2 rounded-full bg-muted overflow-hidden">
-                    <div
-                      className="h-full bg-primary"
-                      style={{
-                        width: `${cat.available > 0 ? Math.min(100, (cat.spent / cat.available) * 100) : 0}%`,
-                      }}
-                    />
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </>
+          ))}
+        </div>
       )}
 
       <div className="rounded-2xl border bg-card p-4 shadow-sm space-y-3">
@@ -435,11 +347,12 @@ export default function Finances() {
           <div className="space-y-3">
             {transactions.map((tx) => {
               const editing = editingTxId === tx.id;
+
               return (
                 <div key={tx.id} className="rounded-xl border p-3 space-y-3">
                   {!editing ? (
                     <div className="flex items-start justify-between gap-3">
-                      <div>
+                      <div className="min-w-0">
                         <div className="font-medium">{tx.merchant}</div>
                         <div className="text-sm text-muted-foreground">
                           {format(new Date(`${tx.date}T00:00:00`), "MMM d, yyyy")}
@@ -449,7 +362,7 @@ export default function Finances() {
                       </div>
 
                       <div className="flex items-center gap-2">
-                        <div className="font-semibold">{fmt(tx.amount)}</div>
+                        <div className="font-semibold whitespace-nowrap">{fmt(tx.amount)}</div>
                         <Button variant="outline" size="icon" onClick={() => startEditTx(tx)}>
                           <Pencil className="h-4 w-4" />
                         </Button>
@@ -524,7 +437,10 @@ export default function Finances() {
                       </div>
 
                       <div className="text-xs text-muted-foreground">
-                        Current category: {tx.categoryName ?? txCategoryName.get(tx.categoryId ?? -1) ?? "No category"}
+                        Current category:{" "}
+                        {tx.categoryName ??
+                          txCategoryName.get(tx.categoryId ?? -1) ??
+                          "No category"}
                       </div>
                     </div>
                   )}
