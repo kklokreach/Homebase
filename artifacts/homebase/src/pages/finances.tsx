@@ -1,6 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { format, addMonths, subMonths } from "date-fns";
-import { ChevronLeft, ChevronRight, Pencil, Save, Trash2, X } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  Pencil,
+  Save,
+  Trash2,
+  X,
+  Wallet,
+} from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useGetBudgetDashboard,
@@ -35,6 +43,16 @@ type Transaction = {
   date: string;
   notes: string | null;
   createdAt: string;
+};
+
+type DashboardCategory = {
+  categoryId: number;
+  categoryName: string;
+  budgeted: number;
+  rollover: number;
+  available: number;
+  spent: number;
+  left: number;
 };
 
 function fmt(n: number, showSign = false) {
@@ -297,39 +315,118 @@ export default function Finances() {
       <TransactionForm year={year} month={month} onSaved={refreshAll} />
 
       {isLoading || !dashboard ? (
-        <div className="grid gap-3 md:grid-cols-4">
-          {[1, 2, 3, 4].map((i) => (
-            <Skeleton key={i} className="h-24 rounded-2xl" />
-          ))}
-        </div>
+        <>
+          <div className="grid gap-3 md:grid-cols-4">
+            {[1, 2, 3, 4].map((i) => (
+              <Skeleton key={i} className="h-24 rounded-2xl" />
+            ))}
+          </div>
+          <Skeleton className="h-80 rounded-2xl" />
+        </>
       ) : (
-        <div className="grid gap-3 md:grid-cols-4">
-          {[
-            { label: "Budgeted", value: fmt(dashboard.totalBudgeted), color: "" },
-            {
-              label: "Rollover",
-              value: fmt(dashboard.totalRollover, true),
-              color:
-                dashboard.totalRollover >= 0 ? "text-primary" : "text-destructive",
-            },
-            {
-              label: "Available",
-              value: fmt(dashboard.totalAvailable),
-              color: "text-primary",
-            },
-            {
-              label: "Left",
-              value: fmt(dashboard.totalLeft),
-              color:
-                dashboard.totalLeft < 0 ? "text-destructive" : "text-secondary",
-            },
-          ].map(({ label, value, color }) => (
-            <div key={label} className="rounded-2xl border bg-card p-4 shadow-sm">
-              <div className="text-sm text-muted-foreground">{label}</div>
-              <div className={cn("mt-2 text-2xl font-semibold", color)}>{value}</div>
+        <>
+          <div className="grid gap-3 md:grid-cols-4">
+            {[
+              { label: "Budgeted", value: fmt(dashboard.totalBudgeted), color: "" },
+              {
+                label: "Rollover",
+                value: fmt(dashboard.totalRollover, true),
+                color:
+                  dashboard.totalRollover >= 0 ? "text-primary" : "text-destructive",
+              },
+              {
+                label: "Available",
+                value: fmt(dashboard.totalAvailable),
+                color: "text-primary",
+              },
+              {
+                label: "Left",
+                value: fmt(dashboard.totalLeft),
+                color:
+                  dashboard.totalLeft < 0 ? "text-destructive" : "text-secondary",
+              },
+            ].map(({ label, value, color }) => (
+              <div key={label} className="rounded-2xl border bg-card p-4 shadow-sm">
+                <div className="text-sm text-muted-foreground">{label}</div>
+                <div className={cn("mt-2 text-2xl font-semibold", color)}>{value}</div>
+              </div>
+            ))}
+          </div>
+
+          <div className="rounded-2xl border bg-card p-4 shadow-sm space-y-3">
+            <div className="flex items-center gap-2">
+              <Wallet className="h-4 w-4" />
+              <div className="font-medium">Category spending snapshot</div>
             </div>
-          ))}
-        </div>
+
+            <div className="space-y-3">
+              {(dashboard.categories as DashboardCategory[]).map((cat) => {
+                const percent =
+                  cat.available > 0
+                    ? Math.max(0, Math.min(100, (cat.spent / cat.available) * 100))
+                    : 0;
+
+                return (
+                  <div key={cat.categoryId} className="rounded-xl border p-3 space-y-2">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="font-medium">{cat.categoryName}</div>
+                        <div className="text-xs text-muted-foreground">
+                          Budgeted {fmt(cat.budgeted)} · Rollover {fmt(cat.rollover, true)}
+                        </div>
+                      </div>
+
+                      <div
+                        className={cn(
+                          "text-sm font-medium whitespace-nowrap",
+                          cat.left < 0
+                            ? "text-destructive"
+                            : cat.left === 0
+                            ? "text-muted-foreground"
+                            : "text-primary"
+                        )}
+                      >
+                        Left {fmt(cat.left)}
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-2 text-sm">
+                      <div className="rounded-lg bg-muted/40 px-3 py-2">
+                        <div className="text-xs text-muted-foreground">Available</div>
+                        <div className="font-medium">{fmt(cat.available)}</div>
+                      </div>
+                      <div className="rounded-lg bg-muted/40 px-3 py-2">
+                        <div className="text-xs text-muted-foreground">Spent</div>
+                        <div className="font-medium">{fmt(cat.spent)}</div>
+                      </div>
+                      <div className="rounded-lg bg-muted/40 px-3 py-2">
+                        <div className="text-xs text-muted-foreground">Remaining</div>
+                        <div
+                          className={cn(
+                            "font-medium",
+                            cat.left < 0 ? "text-destructive" : "text-primary"
+                          )}
+                        >
+                          {fmt(cat.left)}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="h-2 rounded-full bg-muted overflow-hidden">
+                      <div
+                        className={cn(
+                          "h-full",
+                          cat.left < 0 ? "bg-destructive" : "bg-primary"
+                        )}
+                        style={{ width: `${percent}%` }}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </>
       )}
 
       <div className="rounded-2xl border bg-card p-4 shadow-sm space-y-3">
