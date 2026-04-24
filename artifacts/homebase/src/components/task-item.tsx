@@ -1,8 +1,9 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { Check, Clock, Edit2, Trash2, User, Users } from "lucide-react";
+import { Check, ChevronDown, Clock, Edit2, ListChecks, Plus, Trash2, User, Users } from "lucide-react";
 import { format } from "date-fns";
 import {
+  useCreateTask,
   useUpdateTask,
   useDeleteTask,
   useCompleteTask,
@@ -25,32 +26,60 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 
+type TaskWithSubtasks = Task & {
+  parentTaskId?: number | null;
+  sortOrder?: number;
+  subtaskSummary?: {
+    total: number;
+    completed: number;
+    progress: number;
+  };
+  subtasks?: TaskWithSubtasks[];
+};
+
 interface TaskItemProps {
-  task: Task;
+  task: TaskWithSubtasks;
   index?: number;
   compact?: boolean;
+  isSubtask?: boolean;
 }
 
-export function TaskItem({ task, index = 0, compact = false }: TaskItemProps) {
+export function TaskItem({ task, index = 0, compact = false, isSubtask = false }: TaskItemProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  const [newSubtaskTitle, setNewSubtaskTitle] = useState("");
   const [editTitle, setEditTitle] = useState(task.title);
   const [editAssignee, setEditAssignee] = useState<string>(task.assignee || "null");
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
+  const createTask = useCreateTask();
   const completeTask = useCompleteTask();
   const updateTask = useUpdateTask();
   const deleteTask = useDeleteTask();
+  const hasSubtasks = (task.subtaskSummary?.total ?? 0) > 0 || (task.subtasks?.length ?? 0) > 0;
+  const subtaskSummary = task.subtaskSummary ?? {
+    total: task.subtasks?.length ?? 0,
+    completed: task.subtasks?.filter((subtask) => subtask.completed).length ?? 0,
+    progress:
+      (task.subtasks?.length ?? 0) > 0
+        ? (task.subtasks?.filter((subtask) => subtask.completed).length ?? 0) / (task.subtasks?.length ?? 1)
+        : 0,
+  };
+
+  const invalidateTaskQueries = () => {
+    queryClient.invalidateQueries({ queryKey: getListTasksQueryKey() });
+    queryClient.invalidateQueries({ queryKey: getGetTodaySummaryQueryKey() });
+    queryClient.invalidateQueries({ queryKey: getGetHomeSnapshotQueryKey() });
+  };
 
   const handleComplete = (checked: boolean) => {
+    if (hasSubtasks) return;
     completeTask.mutate(
       { id: task.id, data: { completed: checked } },
       {
         onSuccess: () => {
-          queryClient.invalidateQueries({ queryKey: getListTasksQueryKey() });
-          queryClient.invalidateQueries({ queryKey: getGetTodaySummaryQueryKey() });
-          queryClient.invalidateQueries({ queryKey: getGetHomeSnapshotQueryKey() });
+          invalidateTaskQueries();
         },
         onError: () => {
           toast({ title: "Failed to update task", variant: "destructive" });
@@ -71,9 +100,7 @@ export function TaskItem({ task, index = 0, compact = false }: TaskItemProps) {
       {
         onSuccess: () => {
           setIsEditing(false);
-          queryClient.invalidateQueries({ queryKey: getListTasksQueryKey() });
-          queryClient.invalidateQueries({ queryKey: getGetTodaySummaryQueryKey() });
-          queryClient.invalidateQueries({ queryKey: getGetHomeSnapshotQueryKey() });
+          invalidateTaskQueries();
         },
         onError: () => {
           toast({ title: "Failed to save task", variant: "destructive" });
@@ -87,9 +114,7 @@ export function TaskItem({ task, index = 0, compact = false }: TaskItemProps) {
       { id: task.id },
       {
         onSuccess: () => {
-          queryClient.invalidateQueries({ queryKey: getListTasksQueryKey() });
-          queryClient.invalidateQueries({ queryKey: getGetTodaySummaryQueryKey() });
-          queryClient.invalidateQueries({ queryKey: getGetHomeSnapshotQueryKey() });
+          invalidateTaskQueries();
         },
         onError: () => {
           toast({ title: "Failed to delete task", variant: "destructive" });
@@ -120,6 +145,31 @@ export function TaskItem({ task, index = 0, compact = false }: TaskItemProps) {
   };
   const assigneeLabel: Record<string, string> = { me: "Patrick", wife: "Lauren", us: "Us" };
 
+  const handleCreateSubtask = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newSubtaskTitle.trim() || createTask.isPending) return;
+
+    createTask.mutate(
+      {
+        data: {
+          title: newSubtaskTitle.trim(),
+          assignee: task.assignee ?? null,
+          parentTaskId: task.id,
+        } as any,
+      },
+      {
+        onSuccess: () => {
+          setNewSubtaskTitle("");
+          setIsOpen(true);
+          invalidateTaskQueries();
+        },
+        onError: () => {
+          toast({ title: "Failed to add subtask", variant: "destructive" });
+        },
+      }
+    );
+  };
+
   return (
     <Collapsible
       open={isOpen}
@@ -127,7 +177,8 @@ export function TaskItem({ task, index = 0, compact = false }: TaskItemProps) {
       className={cn(
         "group bg-card border rounded-xl overflow-hidden transition-all duration-300 animate-in fade-in slide-in-from-bottom-2",
         isOpen ? "shadow-md" : "hover:shadow-sm hover:border-primary/20",
-        task.completed && "opacity-50"
+        task.completed && "opacity-50",
+        isSubtask && "border-border/60 bg-background/70"
       )}
       style={{ animationFillMode: "both", animationDelay: `${index * 50}ms` }}
     >
@@ -135,7 +186,8 @@ export function TaskItem({ task, index = 0, compact = false }: TaskItemProps) {
         <Checkbox
           checked={task.completed}
           onCheckedChange={handleComplete}
-          className="w-5 h-5 rounded-full border-muted-foreground/30 data-[state=checked]:bg-primary data-[state=checked]:border-primary transition-all shrink-0"
+          disabled={hasSubtasks}
+          className="w-5 h-5 rounded-full border-muted-foreground/30 data-[state=checked]:bg-primary data-[state=checked]:border-primary transition-all shrink-0 disabled:opacity-70"
         />
         
         <CollapsibleTrigger asChild>
@@ -148,13 +200,19 @@ export function TaskItem({ task, index = 0, compact = false }: TaskItemProps) {
               {task.title}
             </div>
             
-            {!compact && (task.assignee || task.dueDate) && !isOpen && (
-              <div className="flex items-center gap-2 mt-1.5 opacity-80">
+            {!compact && ((task.assignee || task.dueDate) || hasSubtasks) && !isOpen && (
+              <div className="flex flex-wrap items-center gap-2 mt-1.5 opacity-80">
                 {getAssigneeBadge()}
                 {task.dueDate && (
                   <div className="flex items-center text-xs text-muted-foreground">
                     <Clock className="w-3 h-3 mr-1" />
                     {format(new Date(task.dueDate), "MMM d")}
+                  </div>
+                )}
+                {hasSubtasks && (
+                  <div className="flex items-center text-xs text-muted-foreground">
+                    <ListChecks className="w-3 h-3 mr-1" />
+                    {subtaskSummary.completed}/{subtaskSummary.total}
                   </div>
                 )}
               </div>
@@ -165,6 +223,11 @@ export function TaskItem({ task, index = 0, compact = false }: TaskItemProps) {
         {/* Compact: assignee pill + due date inline */}
         {compact && !isOpen && (
           <div className="flex items-center gap-2 shrink-0">
+            {hasSubtasks && (
+              <span className="text-xs text-muted-foreground tabular-nums">
+                {subtaskSummary.completed}/{subtaskSummary.total}
+              </span>
+            )}
             {task.dueDate && (
               <span className="text-xs text-muted-foreground tabular-nums">
                 {format(new Date(task.dueDate + "T00:00:00"), "MMM d")}
@@ -175,12 +238,34 @@ export function TaskItem({ task, index = 0, compact = false }: TaskItemProps) {
                 {assigneeLabel[task.assignee] || task.assignee}
               </span>
             )}
+            {(hasSubtasks || task.notes || task.dueDate || task.assignee) && (
+              <ChevronDown className={cn("w-4 h-4 text-muted-foreground transition-transform", isOpen && "rotate-180")} />
+            )}
           </div>
         )}
       </div>
 
       <CollapsibleContent className="px-4 pb-4 pt-0">
         <div className="pt-4 border-t border-border/50 animate-in fade-in duration-300">
+          {hasSubtasks && !isEditing && (
+            <div className="mb-4 space-y-3">
+              <div className="rounded-xl bg-muted/30 p-3">
+                <div className="flex items-center justify-between gap-3 text-sm">
+                  <div className="font-medium">Subtasks</div>
+                  <div className="text-muted-foreground">
+                    {subtaskSummary.completed}/{subtaskSummary.total} complete
+                  </div>
+                </div>
+                <div className="mt-2 h-2 rounded-full bg-muted overflow-hidden">
+                  <div
+                    className="h-full bg-primary transition-all duration-300"
+                    style={{ width: `${Math.round(subtaskSummary.progress * 100)}%` }}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
           {isEditing ? (
             <div className="space-y-4">
               <div className="space-y-2">
@@ -245,6 +330,40 @@ export function TaskItem({ task, index = 0, compact = false }: TaskItemProps) {
                   </Button>
                 </div>
               </div>
+
+              {!isSubtask && (
+                <div className="w-full mt-4 space-y-3">
+                  <form onSubmit={handleCreateSubtask} className="flex items-center gap-2">
+                    <div className="relative flex-1">
+                      <Plus className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
+                      <Input
+                        value={newSubtaskTitle}
+                        onChange={(e) => setNewSubtaskTitle(e.target.value)}
+                        placeholder="Add subtask"
+                        className="pl-9"
+                        disabled={createTask.isPending}
+                      />
+                    </div>
+                    <Button type="submit" size="sm" disabled={!newSubtaskTitle.trim() || createTask.isPending}>
+                      Add
+                    </Button>
+                  </form>
+
+                  {(task.subtasks?.length ?? 0) > 0 && (
+                    <div className="space-y-2 pl-1">
+                      {task.subtasks!.map((subtask, subtaskIndex) => (
+                        <TaskItem
+                          key={subtask.id}
+                          task={subtask}
+                          index={subtaskIndex}
+                          compact
+                          isSubtask
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>

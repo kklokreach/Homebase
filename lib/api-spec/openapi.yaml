@@ -728,6 +728,11 @@ components:
         category:
           type: string
           nullable: true
+        parentTaskId:
+          type: integer
+          nullable: true
+        sortOrder:
+          type: integer
         completed:
           type: boolean
         completedAt:
@@ -740,6 +745,20 @@ components:
         updatedAt:
           type: string
           format: date-time
+        subtaskSummary:
+          type: object
+          properties:
+            total:
+              type: integer
+            completed:
+              type: integer
+            progress:
+              type: number
+          required: [total, completed, progress]
+        subtasks:
+          type: array
+          items:
+            $ref: "#/components/schemas/Task"
       required: [id, title, completed, createdAt, updatedAt]
 
     CreateTaskBody:
@@ -764,6 +783,11 @@ components:
         category:
           type: string
           nullable: true
+        parentTaskId:
+          type: integer
+          nullable: true
+        sortOrder:
+          type: integer
       required: [title]
 
     UpdateTaskBody:
@@ -788,6 +812,11 @@ components:
         category:
           type: string
           nullable: true
+        parentTaskId:
+          type: integer
+          nullable: true
+        sortOrder:
+          type: integer
         completed:
           type: boolean
 

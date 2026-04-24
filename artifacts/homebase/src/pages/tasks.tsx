@@ -14,13 +14,6 @@ export default function Tasks() {
     { query: { queryKey: getListTasksQueryKey({ view }) } }
   );
 
-  const getAssigneeForView = () => {
-    if (view === "mine") return "me";
-    if (view === "wife") return "wife";
-    if (view === "shared") return "us";
-    return null;
-  };
-
   return (
     <div className="p-6 md:p-10 max-w-4xl mx-auto space-y-8 animate-in fade-in duration-500">
       <header className="space-y-6">
@@ -30,7 +23,7 @@ export default function Tasks() {
           </div>
           <h1 className="text-3xl font-serif font-bold text-foreground">Tasks</h1>
         </div>
-        <TaskQuickAdd defaultAssignee={getAssigneeForView()} />
+        <TaskQuickAdd />
       </header>
 
       <Tabs value={view} onValueChange={(v) => setView(v as any)} className="w-full">
