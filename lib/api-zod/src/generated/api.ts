@@ -38,10 +38,20 @@ export const ListTasksResponseItem = zod.object({
   recurring: zod.string().nullish(),
   notes: zod.string().nullish(),
   category: zod.string().nullish(),
+  parentTaskId: zod.number().nullish(),
+  sortOrder: zod.number().optional(),
   completed: zod.boolean(),
   completedAt: zod.coerce.date().nullish(),
   createdAt: zod.coerce.date(),
   updatedAt: zod.coerce.date(),
+  subtaskSummary: zod
+    .object({
+      total: zod.number(),
+      completed: zod.number(),
+      progress: zod.number(),
+    })
+    .optional(),
+  subtasks: zod.array(zod.unknown()).optional(),
 });
 export const ListTasksResponse = zod.array(ListTasksResponseItem);
 
@@ -62,6 +72,8 @@ export const CreateTaskBody = zod.object({
   recurring: zod.string().nullish(),
   notes: zod.string().nullish(),
   category: zod.string().nullish(),
+  parentTaskId: zod.coerce.number().nullish(),
+  sortOrder: zod.number().optional(),
 });
 
 /**
@@ -86,10 +98,20 @@ export const GetTaskResponse = zod.object({
   recurring: zod.string().nullish(),
   notes: zod.string().nullish(),
   category: zod.string().nullish(),
+  parentTaskId: zod.number().nullish(),
+  sortOrder: zod.number().optional(),
   completed: zod.boolean(),
   completedAt: zod.coerce.date().nullish(),
   createdAt: zod.coerce.date(),
   updatedAt: zod.coerce.date(),
+  subtaskSummary: zod
+    .object({
+      total: zod.number(),
+      completed: zod.number(),
+      progress: zod.number(),
+    })
+    .optional(),
+  subtasks: zod.array(zod.unknown()).optional(),
 });
 
 /**
@@ -113,6 +135,8 @@ export const UpdateTaskBody = zod.object({
   recurring: zod.string().nullish(),
   notes: zod.string().nullish(),
   category: zod.string().nullish(),
+  parentTaskId: zod.coerce.number().nullish(),
+  sortOrder: zod.number().optional(),
   completed: zod.boolean().optional(),
 });
 
@@ -131,10 +155,20 @@ export const UpdateTaskResponse = zod.object({
   recurring: zod.string().nullish(),
   notes: zod.string().nullish(),
   category: zod.string().nullish(),
+  parentTaskId: zod.number().nullish(),
+  sortOrder: zod.number().optional(),
   completed: zod.boolean(),
   completedAt: zod.coerce.date().nullish(),
   createdAt: zod.coerce.date(),
   updatedAt: zod.coerce.date(),
+  subtaskSummary: zod
+    .object({
+      total: zod.number(),
+      completed: zod.number(),
+      progress: zod.number(),
+    })
+    .optional(),
+  subtasks: zod.array(zod.unknown()).optional(),
 });
 
 /**
@@ -170,10 +204,20 @@ export const CompleteTaskResponse = zod.object({
   recurring: zod.string().nullish(),
   notes: zod.string().nullish(),
   category: zod.string().nullish(),
+  parentTaskId: zod.number().nullish(),
+  sortOrder: zod.number().optional(),
   completed: zod.boolean(),
   completedAt: zod.coerce.date().nullish(),
   createdAt: zod.coerce.date(),
   updatedAt: zod.coerce.date(),
+  subtaskSummary: zod
+    .object({
+      total: zod.number(),
+      completed: zod.number(),
+      progress: zod.number(),
+    })
+    .optional(),
+  subtasks: zod.array(zod.unknown()).optional(),
 });
 
 /**
