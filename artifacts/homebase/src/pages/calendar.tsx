@@ -16,8 +16,8 @@ type CalEvent = {
 };
 
 function assigneeLabel(value: Assignee): string {
-  if (value === "wife") return "Wife";
-  if (value === "me") return "Me";
+  if (value === "wife") return "Lauren";
+  if (value === "me") return "Patrick";
   return "Both";
 }
 

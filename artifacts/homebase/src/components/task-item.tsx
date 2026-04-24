@@ -103,9 +103,9 @@ export function TaskItem({ task, index = 0, compact = false }: TaskItemProps) {
     
     switch (task.assignee) {
       case "me":
-        return <Badge variant="secondary" className="bg-primary/10 text-primary border-primary/20"><User className="w-3 h-3 mr-1" /> Me</Badge>;
+        return <Badge variant="secondary" className="bg-primary/10 text-primary border-primary/20"><User className="w-3 h-3 mr-1" /> Patrick</Badge>;
       case "wife":
-        return <Badge variant="secondary" className="bg-secondary/10 text-secondary border-secondary/20"><User className="w-3 h-3 mr-1" /> Wife</Badge>;
+        return <Badge variant="secondary" className="bg-secondary/10 text-secondary border-secondary/20"><User className="w-3 h-3 mr-1" /> Lauren</Badge>;
       case "us":
         return <Badge variant="secondary" className="bg-chart-3/10 text-chart-3 border-chart-3/20"><Users className="w-3 h-3 mr-1" /> Us</Badge>;
       default:
@@ -118,7 +118,7 @@ export function TaskItem({ task, index = 0, compact = false }: TaskItemProps) {
     wife: "bg-secondary text-secondary-foreground",
     us: "bg-chart-3/80 text-white",
   };
-  const assigneeLabel: Record<string, string> = { me: "Me", wife: "Her", us: "Us" };
+  const assigneeLabel: Record<string, string> = { me: "Patrick", wife: "Lauren", us: "Us" };
 
   return (
     <Collapsible
@@ -199,8 +199,8 @@ export function TaskItem({ task, index = 0, compact = false }: TaskItemProps) {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="null">Unassigned</SelectItem>
-                    <SelectItem value="me">Me</SelectItem>
-                    <SelectItem value="wife">Wife</SelectItem>
+                    <SelectItem value="me">Patrick</SelectItem>
+                    <SelectItem value="wife">Lauren</SelectItem>
                     <SelectItem value="us">Us</SelectItem>
                   </SelectContent>
                 </Select>

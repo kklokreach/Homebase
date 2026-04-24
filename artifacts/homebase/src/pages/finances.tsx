@@ -938,7 +938,7 @@ export default function Finances() {
         <Tabs defaultValue="monthly" className="space-y-4">
           <TabsList className="grid h-auto w-full grid-cols-3 rounded-xl bg-muted/40 p-1">
             <TabsTrigger value="monthly" className="rounded-lg py-2">Monthly</TabsTrigger>
-            <TabsTrigger value="reserves" className="rounded-lg py-2">Reserves</TabsTrigger>
+            <TabsTrigger value="reserves" className="rounded-lg py-2">Funds</TabsTrigger>
             <TabsTrigger value="transactions" className="rounded-lg py-2">Transactions</TabsTrigger>
           </TabsList>
 
@@ -1164,7 +1164,7 @@ export default function Finances() {
             </form>
 
             <div className="rounded-2xl border bg-card p-4 shadow-sm space-y-3">
-              <div className="font-medium">Reserve funds</div>
+              <div className="font-medium">Funds</div>
 
               {reserveLoading ? (
                 <div className="space-y-3">
