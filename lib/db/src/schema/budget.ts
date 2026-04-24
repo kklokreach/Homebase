@@ -28,6 +28,32 @@ export const transactionsTable = pgTable("transactions", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+// Reserve entities are kept separate from monthly budget categories so future
+// household scoping can be added with a dedicated foreign key without
+// disturbing the current monthly-budget model.
+export const reserveFundsTable = pgTable("reserve_funds", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  icon: text("icon"),
+  color: text("color"),
+  sortOrder: integer("sort_order").notNull().default(0),
+  targetAmount: numeric("target_amount", { precision: 10, scale: 2 }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
+});
+
+export const reserveTransactionsTable = pgTable("reserve_transactions", {
+  id: serial("id").primaryKey(),
+  reserveFundId: integer("reserve_fund_id")
+    .notNull()
+    .references(() => reserveFundsTable.id, { onDelete: "cascade" }),
+  type: text("type").notNull(),
+  amount: numeric("amount", { precision: 10, scale: 2 }).notNull(),
+  date: text("date").notNull(),
+  notes: text("notes"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const insertBudgetCategorySchema = createInsertSchema(budgetCategoriesTable).omit({ id: true });
 export type InsertBudgetCategory = z.infer<typeof insertBudgetCategorySchema>;
 export type BudgetCategory = typeof budgetCategoriesTable.$inferSelect;
@@ -39,3 +65,18 @@ export type MonthlyBudget = typeof monthlyBudgetsTable.$inferSelect;
 export const insertTransactionSchema = createInsertSchema(transactionsTable).omit({ id: true, createdAt: true });
 export type InsertTransaction = z.infer<typeof insertTransactionSchema>;
 export type Transaction = typeof transactionsTable.$inferSelect;
+
+export const insertReserveFundSchema = createInsertSchema(reserveFundsTable).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertReserveFund = z.infer<typeof insertReserveFundSchema>;
+export type ReserveFund = typeof reserveFundsTable.$inferSelect;
+
+export const insertReserveTransactionSchema = createInsertSchema(reserveTransactionsTable).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertReserveTransaction = z.infer<typeof insertReserveTransactionSchema>;
+export type ReserveTransaction = typeof reserveTransactionsTable.$inferSelect;

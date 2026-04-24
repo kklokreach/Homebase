@@ -377,6 +377,156 @@ paths:
         "204":
           description: Deleted
 
+  # ── Reserve Funds ────────────────────────────────────────────────────────
+  /reserves/funds:
+    get:
+      operationId: listReserveFunds
+      tags: [finances]
+      summary: List reserve funds with calculated balances
+      responses:
+        "200":
+          description: Reserve funds
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ReserveFund"
+    post:
+      operationId: createReserveFund
+      tags: [finances]
+      summary: Create a reserve fund
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateReserveFundBody"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReserveFund"
+
+  /reserves/funds/{id}:
+    put:
+      operationId: updateReserveFund
+      tags: [finances]
+      summary: Update a reserve fund
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateReserveFundBody"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReserveFund"
+    delete:
+      operationId: deleteReserveFund
+      tags: [finances]
+      summary: Delete a reserve fund
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /reserves/transactions:
+    get:
+      operationId: listReserveTransactions
+      tags: [finances]
+      summary: List reserve fund transactions
+      parameters:
+        - name: reserveFundId
+          in: query
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Reserve transactions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ReserveTransaction"
+    post:
+      operationId: createReserveTransaction
+      tags: [finances]
+      summary: Create a reserve fund transaction
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateReserveTransactionBody"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReserveTransaction"
+
+  /reserves/transactions/{id}:
+    put:
+      operationId: updateReserveTransaction
+      tags: [finances]
+      summary: Update a reserve fund transaction
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateReserveTransactionBody"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReserveTransaction"
+    delete:
+      operationId: deleteReserveTransaction
+      tags: [finances]
+      summary: Delete a reserve fund transaction
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
   # ── Finance Dashboard ─────────────────────────────────────────────────────
   /budget/dashboard:
     get:
@@ -678,6 +828,136 @@ components:
         categoryId:
           type: integer
           nullable: true
+        date:
+          type: string
+          format: date
+        notes:
+          type: string
+          nullable: true
+
+    ReserveFund:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        icon:
+          type: string
+          nullable: true
+        color:
+          type: string
+          nullable: true
+        sortOrder:
+          type: integer
+        targetAmount:
+          type: number
+          nullable: true
+        balance:
+          type: number
+        progress:
+          type: number
+          nullable: true
+        transactionCount:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required: [id, name, sortOrder, balance, transactionCount, createdAt, updatedAt]
+
+    CreateReserveFundBody:
+      type: object
+      properties:
+        name:
+          type: string
+        icon:
+          type: string
+          nullable: true
+        color:
+          type: string
+          nullable: true
+        sortOrder:
+          type: integer
+        targetAmount:
+          type: number
+          nullable: true
+      required: [name]
+
+    UpdateReserveFundBody:
+      type: object
+      properties:
+        name:
+          type: string
+        icon:
+          type: string
+          nullable: true
+        color:
+          type: string
+          nullable: true
+        sortOrder:
+          type: integer
+        targetAmount:
+          type: number
+          nullable: true
+
+    ReserveTransactionType:
+      type: string
+      enum: [contribution, withdrawal, adjustment]
+
+    ReserveTransaction:
+      type: object
+      properties:
+        id:
+          type: integer
+        reserveFundId:
+          type: integer
+        reserveFundName:
+          type: string
+        type:
+          $ref: "#/components/schemas/ReserveTransactionType"
+        amount:
+          type: number
+        date:
+          type: string
+          format: date
+        notes:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, reserveFundId, reserveFundName, type, amount, date, createdAt]
+
+    CreateReserveTransactionBody:
+      type: object
+      properties:
+        reserveFundId:
+          type: integer
+        type:
+          $ref: "#/components/schemas/ReserveTransactionType"
+        amount:
+          type: number
+        date:
+          type: string
+          format: date
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+      required: [reserveFundId, type, amount]
+
+    UpdateReserveTransactionBody:
+      type: object
+      properties:
+        reserveFundId:
+          type: integer
+        type:
+          $ref: "#/components/schemas/ReserveTransactionType"
+        amount:
+          type: number
         date:
           type: string
           format: date
