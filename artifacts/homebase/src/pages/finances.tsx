@@ -20,6 +20,7 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { MonthlyReviewTab } from "@/components/monthly-review-tab";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
@@ -936,10 +937,11 @@ export default function Finances() {
         </>
       ) : (
         <Tabs defaultValue="monthly" className="space-y-4">
-          <TabsList className="grid h-auto w-full grid-cols-3 rounded-xl bg-muted/40 p-1">
+          <TabsList className="grid h-auto w-full grid-cols-4 rounded-xl bg-muted/40 p-1">
             <TabsTrigger value="monthly" className="rounded-lg py-2">Monthly</TabsTrigger>
             <TabsTrigger value="reserves" className="rounded-lg py-2">Funds</TabsTrigger>
             <TabsTrigger value="transactions" className="rounded-lg py-2">Transactions</TabsTrigger>
+            <TabsTrigger value="reviews" className="rounded-lg py-2">Reviews</TabsTrigger>
           </TabsList>
 
           <TabsContent value="monthly" className="space-y-6">
@@ -1352,6 +1354,15 @@ export default function Finances() {
                 </div>
               )}
             </div>
+          </TabsContent>
+
+          <TabsContent value="reviews" className="space-y-4">
+            <MonthlyReviewTab
+              apiOrigin={API_ORIGIN}
+              viewDate={viewDate}
+              setViewDate={setViewDate}
+              isCurrentMonth={isCurrentMonth}
+            />
           </TabsContent>
         </Tabs>
       )}

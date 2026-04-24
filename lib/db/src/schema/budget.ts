@@ -1,4 +1,4 @@
-import { pgTable, text, serial, integer, numeric, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, numeric, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -54,6 +54,37 @@ export const reserveTransactionsTable = pgTable("reserve_transactions", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+// Monthly reviews are month-scoped records so household/user scoping can be
+// added later with a dedicated foreign key without changing the review model.
+export const monthlyReviewsTable = pgTable(
+  "monthly_reviews",
+  {
+    id: serial("id").primaryKey(),
+    year: integer("year").notNull(),
+    month: integer("month").notNull(),
+    notes: text("notes"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
+  },
+  (table) => ({
+    yearMonthUnique: uniqueIndex("monthly_reviews_year_month_unique").on(table.year, table.month),
+  }),
+);
+
+export const monthlyReviewAccountSnapshotsTable = pgTable("monthly_review_account_snapshots", {
+  id: serial("id").primaryKey(),
+  monthlyReviewId: integer("monthly_review_id")
+    .notNull()
+    .references(() => monthlyReviewsTable.id, { onDelete: "cascade" }),
+  accountName: text("account_name").notNull(),
+  accountType: text("account_type"),
+  balance: numeric("balance", { precision: 10, scale: 2 }).notNull(),
+  sortOrder: integer("sort_order").notNull().default(0),
+  notes: text("notes"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
+});
+
 export const insertBudgetCategorySchema = createInsertSchema(budgetCategoriesTable).omit({ id: true });
 export type InsertBudgetCategory = z.infer<typeof insertBudgetCategorySchema>;
 export type BudgetCategory = typeof budgetCategoriesTable.$inferSelect;
@@ -80,3 +111,19 @@ export const insertReserveTransactionSchema = createInsertSchema(reserveTransact
 });
 export type InsertReserveTransaction = z.infer<typeof insertReserveTransactionSchema>;
 export type ReserveTransaction = typeof reserveTransactionsTable.$inferSelect;
+
+export const insertMonthlyReviewSchema = createInsertSchema(monthlyReviewsTable).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertMonthlyReview = z.infer<typeof insertMonthlyReviewSchema>;
+export type MonthlyReview = typeof monthlyReviewsTable.$inferSelect;
+
+export const insertMonthlyReviewAccountSnapshotSchema = createInsertSchema(monthlyReviewAccountSnapshotsTable).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertMonthlyReviewAccountSnapshot = z.infer<typeof insertMonthlyReviewAccountSnapshotSchema>;
+export type MonthlyReviewAccountSnapshot = typeof monthlyReviewAccountSnapshotsTable.$inferSelect;
