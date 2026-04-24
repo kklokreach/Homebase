@@ -527,6 +527,119 @@ paths:
         "204":
           description: Deleted
 
+  # ── Monthly Reviews ──────────────────────────────────────────────────────
+  /reviews/monthly:
+    get:
+      operationId: getMonthlyReview
+      tags: [finances]
+      summary: Get or initialize a monthly review for a year and month
+      parameters:
+        - name: year
+          in: query
+          required: true
+          schema:
+            type: integer
+        - name: month
+          in: query
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Monthly review payload
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MonthlyReviewPayload"
+
+  /reviews/monthly/{id}:
+    put:
+      operationId: updateMonthlyReview
+      tags: [finances]
+      summary: Update a monthly review
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateMonthlyReviewBody"
+      responses:
+        "200":
+          description: Updated review
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MonthlyReview"
+
+  /reviews/monthly/{id}/accounts:
+    post:
+      operationId: createMonthlyReviewAccountSnapshot
+      tags: [finances]
+      summary: Create an account snapshot for a monthly review
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateMonthlyReviewAccountSnapshotBody"
+      responses:
+        "201":
+          description: Created account snapshot
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MonthlyReviewAccountSnapshot"
+
+  /reviews/monthly/accounts/{id}:
+    put:
+      operationId: updateMonthlyReviewAccountSnapshot
+      tags: [finances]
+      summary: Update an account snapshot
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateMonthlyReviewAccountSnapshotBody"
+      responses:
+        "200":
+          description: Updated account snapshot
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MonthlyReviewAccountSnapshot"
+    delete:
+      operationId: deleteMonthlyReviewAccountSnapshot
+      tags: [finances]
+      summary: Delete an account snapshot
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
   # ── Finance Dashboard ─────────────────────────────────────────────────────
   /budget/dashboard:
     get:
@@ -964,6 +1077,182 @@ components:
         notes:
           type: string
           nullable: true
+
+    MonthlyReview:
+      type: object
+      properties:
+        id:
+          type: integer
+        year:
+          type: integer
+        month:
+          type: integer
+        notes:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required: [id, year, month, createdAt, updatedAt]
+
+    UpdateMonthlyReviewBody:
+      type: object
+      properties:
+        notes:
+          type: string
+          nullable: true
+
+    MonthlyReviewBudgetCategory:
+      type: object
+      properties:
+        categoryId:
+          type: integer
+        categoryName:
+          type: string
+        budgeted:
+          type: number
+        spent:
+          type: number
+        left:
+          type: number
+      required: [categoryId, categoryName, budgeted, spent, left]
+
+    MonthlyReviewBudgetSummary:
+      type: object
+      properties:
+        year:
+          type: integer
+        month:
+          type: integer
+        totalBudgeted:
+          type: number
+        totalSpent:
+          type: number
+        totalLeft:
+          type: number
+        overBudgetCount:
+          type: integer
+        underBudgetCount:
+          type: integer
+        categories:
+          type: array
+          items:
+            $ref: "#/components/schemas/MonthlyReviewBudgetCategory"
+      required: [year, month, totalBudgeted, totalSpent, totalLeft, overBudgetCount, underBudgetCount, categories]
+
+    MonthlyReviewFundSummaryItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        targetAmount:
+          type: number
+          nullable: true
+        balance:
+          type: number
+        monthlyChange:
+          type: number
+        progress:
+          type: number
+          nullable: true
+      required: [id, name, balance, monthlyChange]
+
+    MonthlyReviewFundsSummary:
+      type: object
+      properties:
+        year:
+          type: integer
+        month:
+          type: integer
+        totalBalance:
+          type: number
+        totalMonthlyChange:
+          type: number
+        funds:
+          type: array
+          items:
+            $ref: "#/components/schemas/MonthlyReviewFundSummaryItem"
+      required: [year, month, totalBalance, totalMonthlyChange, funds]
+
+    MonthlyReviewAccountSnapshot:
+      type: object
+      properties:
+        id:
+          type: integer
+        monthlyReviewId:
+          type: integer
+        accountName:
+          type: string
+        accountType:
+          type: string
+          nullable: true
+        balance:
+          type: number
+        sortOrder:
+          type: integer
+        notes:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required: [id, monthlyReviewId, accountName, balance, sortOrder, createdAt, updatedAt]
+
+    CreateMonthlyReviewAccountSnapshotBody:
+      type: object
+      properties:
+        accountName:
+          type: string
+        accountType:
+          type: string
+          nullable: true
+        balance:
+          type: number
+        sortOrder:
+          type: integer
+        notes:
+          type: string
+          nullable: true
+      required: [accountName, balance]
+
+    UpdateMonthlyReviewAccountSnapshotBody:
+      type: object
+      properties:
+        accountName:
+          type: string
+        accountType:
+          type: string
+          nullable: true
+        balance:
+          type: number
+        sortOrder:
+          type: integer
+        notes:
+          type: string
+          nullable: true
+
+    MonthlyReviewPayload:
+      type: object
+      properties:
+        review:
+          $ref: "#/components/schemas/MonthlyReview"
+        budgetReview:
+          $ref: "#/components/schemas/MonthlyReviewBudgetSummary"
+        fundsReview:
+          $ref: "#/components/schemas/MonthlyReviewFundsSummary"
+        accountSnapshots:
+          type: array
+          items:
+            $ref: "#/components/schemas/MonthlyReviewAccountSnapshot"
+      required: [review, budgetReview, fundsReview, accountSnapshots]
 
     BudgetCategoryLine:
       type: object
