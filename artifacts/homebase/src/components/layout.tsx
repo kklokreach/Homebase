@@ -1,12 +1,13 @@
 import { ReactNode } from "react";
 import { Link, useLocation } from "wouter";
-import { CalendarDays, CheckSquare, Home, PieChart, Settings } from "lucide-react";
+import { CalendarDays, CheckSquare, FileText, Home, PieChart, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const NAV_ITEMS = [
   { path: "/", label: "Homebase", icon: Home },
   { path: "/tasks", label: "Tasks", icon: CheckSquare },
   { path: "/finances", label: "Finances", icon: PieChart },
+  { path: "/notes", label: "Notes", icon: FileText },
   { path: "/calendar", label: "Calendar", icon: CalendarDays },
   { path: "/settings", label: "Settings", icon: Settings },
 ];
@@ -18,7 +19,7 @@ export function Layout({ children }: { children: ReactNode }) {
     <div className="min-h-[100dvh] flex flex-col md:flex-row bg-background">
       {/* Mobile Nav */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-card border-t border-border/50 pb-safe">
-        <div className="flex items-center justify-around p-2">
+        <div className="flex items-center justify-start gap-1 overflow-x-auto p-2">
           {NAV_ITEMS.map((item) => {
             const Icon = item.icon;
             const isActive = location === item.path;
