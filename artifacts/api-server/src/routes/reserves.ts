@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { eq, inArray, sql } from "drizzle-orm";
 import { db, reserveFundsTable, reserveTransactionsTable } from "@workspace/db";
+import { isPlainObject, parsePositiveIntParam, sendInvalidId } from "../lib/http";
 
 const router: IRouter = Router();
 
@@ -21,15 +22,6 @@ type ReserveTransactionInput = {
   date?: string;
   notes?: string | null;
 };
-
-function getIdFromParams(params: Record<string, string | string[]>): number {
-  const raw = Array.isArray(params.id) ? params.id[0] : params.id;
-  return parseInt(raw, 10);
-}
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 function parseOptionalText(
   value: unknown,
@@ -301,7 +293,11 @@ router.post("/reserves/funds", async (req, res): Promise<void> => {
 });
 
 router.put("/reserves/funds/:id", async (req, res): Promise<void> => {
-  const id = getIdFromParams(req.params);
+  const id = parsePositiveIntParam(req.params, "id");
+  if (id === null) {
+    sendInvalidId(res, "reserve fund id");
+    return;
+  }
   const parsed = validateReserveFundBody(req.body, true);
   if ("error" in parsed) {
     res.status(400).json({ error: parsed.error });
@@ -336,7 +332,11 @@ router.put("/reserves/funds/:id", async (req, res): Promise<void> => {
 });
 
 router.delete("/reserves/funds/:id", async (req, res): Promise<void> => {
-  const id = getIdFromParams(req.params);
+  const id = parsePositiveIntParam(req.params, "id");
+  if (id === null) {
+    sendInvalidId(res, "reserve fund id");
+    return;
+  }
   const [fund] = await db.delete(reserveFundsTable).where(eq(reserveFundsTable.id, id)).returning();
   if (!fund) {
     res.status(404).json({ error: "Reserve fund not found" });
@@ -436,7 +436,11 @@ router.post("/reserves/transactions", async (req, res): Promise<void> => {
 });
 
 router.put("/reserves/transactions/:id", async (req, res): Promise<void> => {
-  const id = getIdFromParams(req.params);
+  const id = parsePositiveIntParam(req.params, "id");
+  if (id === null) {
+    sendInvalidId(res, "reserve transaction id");
+    return;
+  }
   const [existing] = await db.select().from(reserveTransactionsTable).where(eq(reserveTransactionsTable.id, id));
   if (!existing) {
     res.status(404).json({ error: "Reserve transaction not found" });
@@ -496,7 +500,11 @@ router.put("/reserves/transactions/:id", async (req, res): Promise<void> => {
 });
 
 router.delete("/reserves/transactions/:id", async (req, res): Promise<void> => {
-  const id = getIdFromParams(req.params);
+  const id = parsePositiveIntParam(req.params, "id");
+  if (id === null) {
+    sendInvalidId(res, "reserve transaction id");
+    return;
+  }
   const [tx] = await db.delete(reserveTransactionsTable).where(eq(reserveTransactionsTable.id, id)).returning();
   if (!tx) {
     res.status(404).json({ error: "Reserve transaction not found" });

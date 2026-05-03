@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { desc, eq, ilike, or } from "drizzle-orm";
 import { db } from "@workspace/db";
 import { notesTable } from "@workspace/db/schema";
+import { isPlainObject, parsePositiveIntParam, sendInvalidId } from "../lib/http";
 
 const router: IRouter = Router();
 
@@ -9,15 +10,6 @@ type NoteInput = {
   title?: string;
   body?: string;
 };
-
-function getIdFromParams(params: Record<string, string | string[]>): number {
-  const raw = Array.isArray(params.id) ? params.id[0] : params.id;
-  return parseInt(raw, 10);
-}
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 function validateNoteBody(body: unknown, partial: boolean): NoteInput | { error: string } {
   if (!isPlainObject(body)) return { error: "Body must be an object" };
@@ -97,9 +89,9 @@ router.post("/notes", async (req, res): Promise<void> => {
 });
 
 router.get("/notes/:id", async (req, res): Promise<void> => {
-  const id = getIdFromParams(req.params);
-  if (!Number.isInteger(id)) {
-    res.status(400).json({ error: "Invalid note id" });
+  const id = parsePositiveIntParam(req.params, "id");
+  if (id === null) {
+    sendInvalidId(res, "note id");
     return;
   }
 
@@ -113,9 +105,9 @@ router.get("/notes/:id", async (req, res): Promise<void> => {
 });
 
 router.put("/notes/:id", async (req, res): Promise<void> => {
-  const id = getIdFromParams(req.params);
-  if (!Number.isInteger(id)) {
-    res.status(400).json({ error: "Invalid note id" });
+  const id = parsePositiveIntParam(req.params, "id");
+  if (id === null) {
+    sendInvalidId(res, "note id");
     return;
   }
 
@@ -143,9 +135,9 @@ router.put("/notes/:id", async (req, res): Promise<void> => {
 });
 
 router.delete("/notes/:id", async (req, res): Promise<void> => {
-  const id = getIdFromParams(req.params);
-  if (!Number.isInteger(id)) {
-    res.status(400).json({ error: "Invalid note id" });
+  const id = parsePositiveIntParam(req.params, "id");
+  if (id === null) {
+    sendInvalidId(res, "note id");
     return;
   }
 

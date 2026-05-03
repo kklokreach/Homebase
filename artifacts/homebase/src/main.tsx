@@ -1,16 +1,37 @@
 import { createRoot } from "react-dom/client";
+import { getApiOrigin } from "@/lib/api-base";
 import "./index.css";
 
 function showFatal(message: string) {
   const root = document.getElementById("root");
   if (!root) return;
 
-  root.innerHTML = `
-    <div style="padding:16px;font-family:system-ui,Arial,sans-serif;line-height:1.5;color:#111;background:#fff;min-height:100vh">
-      <h1 style="font-size:18px;margin:0 0 12px">Homebase crashed on startup</h1>
-      <pre style="white-space:pre-wrap;word-break:break-word;background:#f6f6f6;padding:12px;border-radius:8px;border:1px solid #ddd">${String(message)}</pre>
-    </div>
-  `;
+  root.replaceChildren();
+
+  const wrapper = document.createElement("div");
+  wrapper.style.padding = "16px";
+  wrapper.style.fontFamily = "system-ui, Arial, sans-serif";
+  wrapper.style.lineHeight = "1.5";
+  wrapper.style.color = "#111";
+  wrapper.style.background = "#fff";
+  wrapper.style.minHeight = "100vh";
+
+  const heading = document.createElement("h1");
+  heading.style.fontSize = "18px";
+  heading.style.margin = "0 0 12px";
+  heading.textContent = "Homebase crashed on startup";
+
+  const detail = document.createElement("pre");
+  detail.style.whiteSpace = "pre-wrap";
+  detail.style.wordBreak = "break-word";
+  detail.style.background = "#f6f6f6";
+  detail.style.padding = "12px";
+  detail.style.borderRadius = "8px";
+  detail.style.border = "1px solid #ddd";
+  detail.textContent = String(message);
+
+  wrapper.append(heading, detail);
+  root.append(wrapper);
 }
 
 window.addEventListener("error", (event) => {
@@ -29,11 +50,7 @@ async function boot() {
       import("@workspace/api-client-react"),
     ]);
 
-    const API_ORIGIN = (import.meta.env.VITE_API_BASE_URL ?? "https://homebase-ll6f.onrender.com")
-      .replace(/\/api\/?$/, "")
-      .replace(/\/$/, "");
-
-    apiClient.setBaseUrl(API_ORIGIN);
+    apiClient.setBaseUrl(getApiOrigin());
 
     createRoot(document.getElementById("root")!).render(<App />);
   } catch (err) {

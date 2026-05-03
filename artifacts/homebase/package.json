@@ -4,10 +4,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite --config vite.config.ts --host 0.0.0.0",
-    "build": "vite build --config vite.config.ts",
-    "serve": "vite preview --config vite.config.ts --host 0.0.0.0",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "dev": "node ./node_modules/vite/bin/vite.js --config vite.config.ts --host 0.0.0.0",
+    "build": "node ./node_modules/vite/bin/vite.js build --config vite.config.ts",
+    "serve": "node ./node_modules/vite/bin/vite.js preview --config vite.config.ts --host 0.0.0.0",
+    "typecheck": "node ../../node_modules/typescript/bin/tsc -p tsconfig.json --noEmit"
   },
   "devDependencies": {
     "@hookform/resolvers": "^3.10.0",

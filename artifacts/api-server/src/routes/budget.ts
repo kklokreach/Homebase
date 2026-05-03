@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { and, eq, or, lt, sql } from "drizzle-orm";
 import { db, budgetCategoriesTable, monthlyBudgetsTable, transactionsTable } from "@workspace/db";
+import { parsePositiveIntParam, sendInvalidId } from "../lib/http";
 import {
   CreateBudgetCategoryBody,
   UpdateBudgetCategoryParams,
@@ -18,11 +19,6 @@ import {
 } from "@workspace/api-zod";
 
 const router: IRouter = Router();
-
-function getIdFromParams(params: Record<string, string | string[]>): number {
-  const raw = Array.isArray(params.id) ? params.id[0] : params.id;
-  return parseInt(raw, 10);
-}
 
 function currentYearMonth() {
   const now = new Date();
@@ -58,7 +54,11 @@ router.post("/budget/categories", async (req, res): Promise<void> => {
 });
 
 router.put("/budget/categories/:id", async (req, res): Promise<void> => {
-  const id = getIdFromParams(req.params);
+  const id = parsePositiveIntParam(req.params, "id");
+  if (id === null) {
+    sendInvalidId(res, "category id");
+    return;
+  }
   const parsed = UpdateBudgetCategoryBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
@@ -84,7 +84,11 @@ router.put("/budget/categories/:id", async (req, res): Promise<void> => {
 });
 
 router.delete("/budget/categories/:id", async (req, res): Promise<void> => {
-  const id = getIdFromParams(req.params);
+  const id = parsePositiveIntParam(req.params, "id");
+  if (id === null) {
+    sendInvalidId(res, "category id");
+    return;
+  }
   await db.delete(budgetCategoriesTable).where(eq(budgetCategoriesTable.id, id));
   res.sendStatus(204);
 });
@@ -229,7 +233,11 @@ router.post("/transactions", async (req, res): Promise<void> => {
 });
 
 router.put("/transactions/:id", async (req, res): Promise<void> => {
-  const id = getIdFromParams(req.params);
+  const id = parsePositiveIntParam(req.params, "id");
+  if (id === null) {
+    sendInvalidId(res, "transaction id");
+    return;
+  }
   const parsed = UpdateTransactionBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
@@ -268,7 +276,11 @@ router.put("/transactions/:id", async (req, res): Promise<void> => {
 });
 
 router.delete("/transactions/:id", async (req, res): Promise<void> => {
-  const id = getIdFromParams(req.params);
+  const id = parsePositiveIntParam(req.params, "id");
+  if (id === null) {
+    sendInvalidId(res, "transaction id");
+    return;
+  }
   await db.delete(transactionsTable).where(eq(transactionsTable.id, id));
   res.sendStatus(204);
 });

@@ -17,11 +17,8 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
+import { apiFetch } from "@/lib/api-base";
 import { cn } from "@/lib/utils";
-
-const API_ORIGIN = (import.meta.env.VITE_API_BASE_URL ?? "https://homebase-ll6f.onrender.com")
-  .replace(/\/api\/?$/, "")
-  .replace(/\/$/, "");
 
 type Note = {
   id: number;
@@ -32,7 +29,7 @@ type Note = {
 };
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${API_ORIGIN}/api${path}`, {
+  const res = await apiFetch(`/api${path}`, {
     ...init,
     headers: {
       "Content-Type": "application/json",

@@ -10,17 +10,9 @@ import {
   reserveTransactionsTable,
   transactionsTable,
 } from "@workspace/db";
+import { isPlainObject, parsePositiveIntParam, sendInvalidId } from "../lib/http";
 
 const router: IRouter = Router();
-
-function getIdFromParams(params: Record<string, string | string[]>): number {
-  const raw = Array.isArray(params.id) ? params.id[0] : params.id;
-  return parseInt(raw, 10);
-}
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 function parsePositiveInt(value: unknown, field: string): number | { error: string } {
   if (typeof value !== "number" || !Number.isInteger(value) || value <= 0) {
@@ -87,6 +79,15 @@ async function ensureMonthlyReview(year: number, month: number) {
     .returning();
 
   return created;
+}
+
+async function findMonthlyReview(year: number, month: number) {
+  const [review] = await db
+    .select()
+    .from(monthlyReviewsTable)
+    .where(and(eq(monthlyReviewsTable.year, year), eq(monthlyReviewsTable.month, month)));
+
+  return review;
 }
 
 async function buildBudgetReview(year: number, month: number) {
@@ -218,6 +219,35 @@ async function listAccountSnapshots(monthlyReviewId: number) {
   }));
 }
 
+async function buildMonthlyReviewPayload(review: {
+  id: number;
+  year: number;
+  month: number;
+  notes: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}) {
+  const [budgetReview, fundsReview, accountSnapshots] = await Promise.all([
+    buildBudgetReview(review.year, review.month),
+    buildFundsReview(review.year, review.month),
+    listAccountSnapshots(review.id),
+  ]);
+
+  return {
+    review: {
+      id: review.id,
+      year: review.year,
+      month: review.month,
+      notes: review.notes,
+      createdAt: review.createdAt.toISOString(),
+      updatedAt: review.updatedAt.toISOString(),
+    },
+    budgetReview,
+    fundsReview,
+    accountSnapshots,
+  };
+}
+
 router.get("/reviews/monthly", async (req, res): Promise<void> => {
   const year = parseYearQuery(req.query["year"]);
   const month = parseMonthQuery(req.query["month"]);
@@ -230,30 +260,42 @@ router.get("/reviews/monthly", async (req, res): Promise<void> => {
     return;
   }
 
-  const review = await ensureMonthlyReview(year, month);
-  const [budgetReview, fundsReview, accountSnapshots] = await Promise.all([
-    buildBudgetReview(year, month),
-    buildFundsReview(year, month),
-    listAccountSnapshots(review.id),
-  ]);
+  const review = await findMonthlyReview(year, month);
+  if (!review) {
+    res.status(404).json({ error: "Monthly review not found" });
+    return;
+  }
 
-  res.json({
-    review: {
-      id: review.id,
-      year: review.year,
-      month: review.month,
-      notes: review.notes,
-      createdAt: review.createdAt.toISOString(),
-      updatedAt: review.updatedAt.toISOString(),
-    },
-    budgetReview,
-    fundsReview,
-    accountSnapshots,
-  });
+  res.json(await buildMonthlyReviewPayload(review));
+});
+
+router.post("/reviews/monthly", async (req, res): Promise<void> => {
+  if (!isPlainObject(req.body)) {
+    res.status(400).json({ error: "Body must be an object" });
+    return;
+  }
+
+  const year = parseYearQuery(req.body["year"]);
+  const month = parseMonthQuery(req.body["month"]);
+  if (isErrorResult(year)) {
+    res.status(400).json({ error: year.error });
+    return;
+  }
+  if (isErrorResult(month)) {
+    res.status(400).json({ error: month.error });
+    return;
+  }
+
+  const review = await ensureMonthlyReview(year, month);
+  res.status(201).json(await buildMonthlyReviewPayload(review));
 });
 
 router.put("/reviews/monthly/:id", async (req, res): Promise<void> => {
-  const id = getIdFromParams(req.params);
+  const id = parsePositiveIntParam(req.params, "id");
+  if (id === null) {
+    sendInvalidId(res, "monthly review id");
+    return;
+  }
   if (!isPlainObject(req.body)) {
     res.status(400).json({ error: "Body must be an object" });
     return;
@@ -287,7 +329,11 @@ router.put("/reviews/monthly/:id", async (req, res): Promise<void> => {
 });
 
 router.post("/reviews/monthly/:id/accounts", async (req, res): Promise<void> => {
-  const monthlyReviewId = getIdFromParams(req.params);
+  const monthlyReviewId = parsePositiveIntParam(req.params, "id");
+  if (monthlyReviewId === null) {
+    sendInvalidId(res, "monthly review id");
+    return;
+  }
   if (!isPlainObject(req.body)) {
     res.status(400).json({ error: "Body must be an object" });
     return;
@@ -356,7 +402,11 @@ router.post("/reviews/monthly/:id/accounts", async (req, res): Promise<void> => 
 });
 
 router.put("/reviews/monthly/accounts/:id", async (req, res): Promise<void> => {
-  const id = getIdFromParams(req.params);
+  const id = parsePositiveIntParam(req.params, "id");
+  if (id === null) {
+    sendInvalidId(res, "account snapshot id");
+    return;
+  }
   if (!isPlainObject(req.body)) {
     res.status(400).json({ error: "Body must be an object" });
     return;
@@ -423,7 +473,11 @@ router.put("/reviews/monthly/accounts/:id", async (req, res): Promise<void> => {
 });
 
 router.delete("/reviews/monthly/accounts/:id", async (req, res): Promise<void> => {
-  const id = getIdFromParams(req.params);
+  const id = parsePositiveIntParam(req.params, "id");
+  if (id === null) {
+    sendInvalidId(res, "account snapshot id");
+    return;
+  }
   const [deleted] = await db
     .delete(monthlyReviewAccountSnapshotsTable)
     .where(eq(monthlyReviewAccountSnapshotsTable.id, id))

@@ -10,6 +10,9 @@ out-tsc
 
 # dependencies
 node_modules
+.tools/
+.pnpm-store/
+.install-stale/
 
 # IDEs and editors
 /.idea

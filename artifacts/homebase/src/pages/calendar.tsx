@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { format, isToday, isTomorrow, parseISO } from "date-fns";
 import { CalendarDays, Clock, MapPin, User, Users } from "lucide-react";
-
-const API_BASE_URL = "https://homebase-ll6f.onrender.com";
+import { apiFetch } from "@/lib/api-base";
 
 type Assignee = "me" | "wife" | "us";
 
@@ -40,7 +39,7 @@ export default function Calendar() {
         setLoading(true);
         setError(null);
 
-        const res = await fetch(`${API_BASE_URL}/api/calendar/events`);
+        const res = await apiFetch("/api/calendar/events");
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
         const data = (await res.json()) as CalEvent[];

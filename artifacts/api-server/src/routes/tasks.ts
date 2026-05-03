@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { and, eq, gte, isNull, inArray, or, sql } from "drizzle-orm";
 import { db } from "@workspace/db";
 import { tasksTable } from "@workspace/db/schema";
+import { parsePositiveIntParam, sendInvalidId } from "../lib/http";
 import {
   CreateTaskBody,
   UpdateTaskBody,
@@ -12,11 +13,6 @@ import {
 const router: IRouter = Router();
 
 type TaskRow = typeof tasksTable.$inferSelect;
-
-function getIdFromParams(params: Record<string, string | string[]>): number {
-  const raw = Array.isArray(params.id) ? params.id[0] : params.id;
-  return parseInt(raw, 10);
-}
 
 async function getTaskById(id: number) {
   const [task] = await db.select().from(tasksTable).where(eq(tasksTable.id, id));
@@ -293,7 +289,11 @@ router.get("/tasks/summary/today", async (_req, res): Promise<void> => {
 });
 
 router.get("/tasks/:id", async (req, res): Promise<void> => {
-  const id = getIdFromParams(req.params);
+  const id = parsePositiveIntParam(req.params, "id");
+  if (id === null) {
+    sendInvalidId(res, "task id");
+    return;
+  }
   const task = await getTaskById(id);
   if (!task) {
     res.status(404).json({ error: "Task not found" });
@@ -305,7 +305,11 @@ router.get("/tasks/:id", async (req, res): Promise<void> => {
 });
 
 router.put("/tasks/:id", async (req, res): Promise<void> => {
-  const id = getIdFromParams(req.params);
+  const id = parsePositiveIntParam(req.params, "id");
+  if (id === null) {
+    sendInvalidId(res, "task id");
+    return;
+  }
   const existing = await getTaskById(id);
   if (!existing) {
     res.status(404).json({ error: "Task not found" });
@@ -372,7 +376,11 @@ router.put("/tasks/:id", async (req, res): Promise<void> => {
 });
 
 router.delete("/tasks/:id", async (req, res): Promise<void> => {
-  const id = getIdFromParams(req.params);
+  const id = parsePositiveIntParam(req.params, "id");
+  if (id === null) {
+    sendInvalidId(res, "task id");
+    return;
+  }
   const existing = await getTaskById(id);
   if (!existing) {
     res.status(404).json({ error: "Task not found" });
@@ -397,7 +405,11 @@ router.delete("/tasks/:id", async (req, res): Promise<void> => {
 });
 
 router.post("/tasks/:id/complete", async (req, res): Promise<void> => {
-  const id = getIdFromParams(req.params);
+  const id = parsePositiveIntParam(req.params, "id");
+  if (id === null) {
+    sendInvalidId(res, "task id");
+    return;
+  }
   const existing = await getTaskById(id);
   if (!existing) {
     res.status(404).json({ error: "Task not found" });

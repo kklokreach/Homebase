@@ -6,6 +6,28 @@ import { cn } from "@/lib/utils"
 // Format: { THEME_NAME: CSS_SELECTOR }
 const THEMES = { light: "", dark: ".dark" } as const
 
+function cssString(value: string): string {
+  return value
+    .replace(/\\/g, "\\\\")
+    .replace(/"/g, '\\"')
+    .replace(/\n/g, "\\a ")
+    .replace(/\r/g, "")
+}
+
+function cssCustomPropertyName(value: string): string {
+  return value.replace(/[^a-zA-Z0-9_-]/g, "_")
+}
+
+function safeCssValue(value: string): string | null {
+  const trimmed = value.trim()
+  const lower = trimmed.toLowerCase()
+
+  if (!trimmed || /[;{}<>\n\r]/.test(trimmed)) return null
+  if (lower.includes("url(") || lower.includes("@import")) return null
+
+  return trimmed
+}
+
 export type ChartConfig = {
   [k in string]: {
     label?: React.ReactNode
@@ -80,13 +102,14 @@ const ChartStyle = ({ id, config }: { id: string; config: ChartConfig }) => {
         __html: Object.entries(THEMES)
           .map(
             ([theme, prefix]) => `
-${prefix} [data-chart=${id}] {
+${prefix} [data-chart="${cssString(id)}"] {
 ${colorConfig
   .map(([key, itemConfig]) => {
     const color =
       itemConfig.theme?.[theme as keyof typeof itemConfig.theme] ||
       itemConfig.color
-    return color ? `  --color-${key}: ${color};` : null
+    const safeColor = color ? safeCssValue(color) : null
+    return safeColor ? `  --color-${cssCustomPropertyName(key)}: ${safeColor};` : null
   })
   .join("\n")}
 }

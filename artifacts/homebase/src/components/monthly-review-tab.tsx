@@ -71,6 +71,16 @@ type MonthlyReviewPayload = {
   accountSnapshots: AccountSnapshot[];
 };
 
+class ApiError extends Error {
+  readonly status: number;
+
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+  }
+}
+
 type AccountSnapshotDraft = {
   accountName: string;
   accountType: string;
@@ -113,6 +123,7 @@ function snapshotToDraft(snapshot: AccountSnapshot): AccountSnapshotDraft {
 async function api<T>(apiOrigin: string, path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${apiOrigin}/api${path}`, {
     ...init,
+    credentials: init?.credentials ?? "include",
     headers: {
       "Content-Type": "application/json",
       ...(init?.headers ?? {}),
@@ -121,7 +132,7 @@ async function api<T>(apiOrigin: string, path: string, init?: RequestInit): Prom
 
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(text || `HTTP ${res.status}`);
+    throw new ApiError(res.status, text || `HTTP ${res.status}`);
   }
 
   if (res.status === 204) return undefined as T;
@@ -163,6 +174,20 @@ export function MonthlyReviewTab({
       setData(reviewData);
       setNotesDraft(reviewData.review.notes ?? "");
     } catch (err) {
+      if (err instanceof ApiError && err.status === 404) {
+        try {
+          const reviewData = await api<MonthlyReviewPayload>(apiOrigin, "/reviews/monthly", {
+            method: "POST",
+            body: JSON.stringify({ year, month }),
+          });
+          setData(reviewData);
+          setNotesDraft(reviewData.review.notes ?? "");
+          return;
+        } catch (createErr) {
+          setError(createErr instanceof Error ? createErr.message : "Failed to create review");
+          return;
+        }
+      }
       setError(err instanceof Error ? err.message : "Failed to load review");
     } finally {
       setLoading(false);

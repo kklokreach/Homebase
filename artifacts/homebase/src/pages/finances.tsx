@@ -22,9 +22,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { MonthlyReviewTab } from "@/components/monthly-review-tab";
 import { useToast } from "@/hooks/use-toast";
+import { apiFetch, getApiOrigin } from "@/lib/api-base";
 import { cn } from "@/lib/utils";
 
-const API_ORIGIN = (import.meta.env.VITE_API_BASE_URL ?? "https://homebase-ll6f.onrender.com").replace(/\/api\/?$/, "").replace(/\/$/, "");
+const API_ORIGIN = getApiOrigin();
 const LAST_CATEGORY_KEY = "homebase:lastCategoryId";
 
 type Category = {
@@ -155,7 +156,7 @@ function emptyReserveTransactionDraft(reserveFundId: number): ReserveTransaction
 }
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${API_ORIGIN}/api${path}`, {
+  const res = await apiFetch(`/api${path}`, {
     ...init,
     headers: {
       "Content-Type": "application/json",

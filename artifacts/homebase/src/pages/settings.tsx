@@ -24,8 +24,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
-
-const API_BASE_URL = "https://homebase-ll6f.onrender.com/api";
+import { apiFetch } from "@/lib/api-base";
 
 type DashboardCategory = {
   categoryId: number;
@@ -38,7 +37,7 @@ type DashboardCategory = {
 };
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${API_BASE_URL}${path}`, {
+  const res = await apiFetch(`/api${path}`, {
     ...init,
     headers: {
       "Content-Type": "application/json",
