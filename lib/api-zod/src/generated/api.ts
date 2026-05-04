@@ -302,6 +302,7 @@ export const ListBudgetCategoriesResponseItem = zod.object({
   name: zod.string(),
   icon: zod.string().nullish(),
   color: zod.string().nullish(),
+  groupName: zod.string().nullish(),
   sortOrder: zod.number(),
 });
 export const ListBudgetCategoriesResponse = zod.array(
@@ -315,6 +316,7 @@ export const CreateBudgetCategoryBody = zod.object({
   name: zod.string(),
   icon: zod.string().nullish(),
   color: zod.string().nullish(),
+  groupName: zod.string().nullish(),
   sortOrder: zod.number().optional(),
 });
 
@@ -329,6 +331,7 @@ export const UpdateBudgetCategoryBody = zod.object({
   name: zod.string().optional(),
   icon: zod.string().nullish(),
   color: zod.string().nullish(),
+  groupName: zod.string().nullish(),
   sortOrder: zod.number().optional(),
 });
 
@@ -337,6 +340,7 @@ export const UpdateBudgetCategoryResponse = zod.object({
   name: zod.string(),
   icon: zod.string().nullish(),
   color: zod.string().nullish(),
+  groupName: zod.string().nullish(),
   sortOrder: zod.number(),
 });
 
@@ -466,10 +470,14 @@ export const GetBudgetDashboardResponse = zod.object({
   totalAvailable: zod.number(),
   totalSpent: zod.number(),
   totalLeft: zod.number(),
+  incomeAmount: zod.number().optional(),
+  incomeRemaining: zod.number().optional(),
+  budgetOverUnder: zod.number().optional(),
   categories: zod.array(
     zod.object({
       categoryId: zod.number(),
       categoryName: zod.string(),
+      categoryGroupName: zod.string().nullish(),
       budgeted: zod.number(),
       rollover: zod.number(),
       available: zod.number(),
@@ -597,6 +605,8 @@ export const GetHomeSnapshotResponse = zod.object({
     totalAvailable: zod.number(),
     totalSpent: zod.number(),
     totalLeft: zod.number(),
+    incomeAmount: zod.number().optional(),
+    incomeRemaining: zod.number().optional(),
     month: zod.number(),
     year: zod.number(),
   }),

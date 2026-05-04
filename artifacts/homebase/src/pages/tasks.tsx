@@ -1,18 +1,68 @@
 import { useState } from "react";
-import { useListTasks, getListTasksQueryKey } from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
+import {
+  useListTasks,
+  getListTasksQueryKey,
+  getGetTodaySummaryQueryKey,
+  getGetHomeSnapshotQueryKey,
+} from "@workspace/api-client-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { TaskQuickAdd } from "@/components/task-quick-add";
 import { TaskItem } from "@/components/task-item";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CheckSquare } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { apiFetch } from "@/lib/api-base";
 
 export default function Tasks() {
   const [view, setView] = useState<"today" | "upcoming" | "mine" | "wife" | "shared">("today");
+  const [reorderingTaskId, setReorderingTaskId] = useState<number | null>(null);
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
   
   const { data: tasks, isLoading } = useListTasks(
     { view },
     { query: { queryKey: getListTasksQueryKey({ view }) } }
   );
+
+  function refreshTasks() {
+    queryClient.invalidateQueries({ queryKey: getListTasksQueryKey() });
+    queryClient.invalidateQueries({ queryKey: getGetTodaySummaryQueryKey() });
+    queryClient.invalidateQueries({ queryKey: getGetHomeSnapshotQueryKey() });
+  }
+
+  async function moveTask(taskId: number, direction: "up" | "down") {
+    const current = tasks ?? [];
+    const index = current.findIndex((task) => task.id === taskId);
+    const nextIndex = direction === "up" ? index - 1 : index + 1;
+    if (index < 0 || nextIndex < 0 || nextIndex >= current.length) return;
+
+    const reordered = [...current];
+    const currentTask = reordered[index];
+    const nextTask = reordered[nextIndex];
+    if (!currentTask || !nextTask) return;
+    reordered[index] = nextTask;
+    reordered[nextIndex] = currentTask;
+
+    try {
+      setReorderingTaskId(taskId);
+      const res = await apiFetch("/api/tasks/reorder", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          parentTaskId: null,
+          orderedIds: reordered.map((task) => task.id),
+        }),
+      });
+
+      if (!res.ok) throw new Error(await res.text());
+      refreshTasks();
+    } catch {
+      toast({ title: "Failed to reorder task", variant: "destructive" });
+    } finally {
+      setReorderingTaskId(null);
+    }
+  }
 
   return (
     <div className="p-6 md:p-10 max-w-4xl mx-auto space-y-8 animate-in fade-in duration-500">
@@ -53,7 +103,16 @@ export default function Tasks() {
           ) : (
             <div className="space-y-3">
               {tasks?.map((task, i) => (
-                <TaskItem key={task.id} task={task} index={i} />
+                <TaskItem
+                  key={task.id}
+                  task={task}
+                  index={i}
+                  canMoveUp={i > 0}
+                  canMoveDown={i < tasks.length - 1}
+                  isReordering={reorderingTaskId === task.id}
+                  onMoveUp={() => moveTask(task.id, "up")}
+                  onMoveDown={() => moveTask(task.id, "down")}
+                />
               ))}
             </div>
           )}

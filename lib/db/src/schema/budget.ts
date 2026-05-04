@@ -7,6 +7,7 @@ export const budgetCategoriesTable = pgTable("budget_categories", {
   name: text("name").notNull(),
   icon: text("icon"),
   color: text("color"),
+  groupName: text("group_name"),
   sortOrder: integer("sort_order").notNull().default(0),
 });
 
@@ -17,6 +18,20 @@ export const monthlyBudgetsTable = pgTable("monthly_budgets", {
   month: integer("month").notNull(),
   budgetAmount: numeric("budget_amount", { precision: 10, scale: 2 }).notNull().default("0"),
 });
+
+export const monthlyIncomeTable = pgTable(
+  "monthly_income",
+  {
+    id: serial("id").primaryKey(),
+    year: integer("year").notNull(),
+    month: integer("month").notNull(),
+    amount: numeric("amount", { precision: 10, scale: 2 }).notNull().default("0"),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
+  },
+  (table) => ({
+    yearMonthUnique: uniqueIndex("monthly_income_year_month_unique").on(table.year, table.month),
+  }),
+);
 
 export const transactionsTable = pgTable("transactions", {
   id: serial("id").primaryKey(),
@@ -92,6 +107,13 @@ export type BudgetCategory = typeof budgetCategoriesTable.$inferSelect;
 export const insertMonthlyBudgetSchema = createInsertSchema(monthlyBudgetsTable).omit({ id: true });
 export type InsertMonthlyBudget = z.infer<typeof insertMonthlyBudgetSchema>;
 export type MonthlyBudget = typeof monthlyBudgetsTable.$inferSelect;
+
+export const insertMonthlyIncomeSchema = createInsertSchema(monthlyIncomeTable).omit({
+  id: true,
+  updatedAt: true,
+});
+export type InsertMonthlyIncome = z.infer<typeof insertMonthlyIncomeSchema>;
+export type MonthlyIncome = typeof monthlyIncomeTable.$inferSelect;
 
 export const insertTransactionSchema = createInsertSchema(transactionsTable).omit({ id: true, createdAt: true });
 export type InsertTransaction = z.infer<typeof insertTransactionSchema>;

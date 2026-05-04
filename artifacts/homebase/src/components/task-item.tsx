@@ -1,6 +1,6 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { Check, ChevronDown, Clock, Edit2, ListChecks, Plus, Trash2, User, Users } from "lucide-react";
+import { ArrowDown, ArrowUp, Check, ChevronDown, Clock, Edit2, ListChecks, Plus, Trash2, User, Users } from "lucide-react";
 import { format } from "date-fns";
 import {
   useCreateTask,
@@ -42,9 +42,24 @@ interface TaskItemProps {
   index?: number;
   compact?: boolean;
   isSubtask?: boolean;
+  canMoveUp?: boolean;
+  canMoveDown?: boolean;
+  isReordering?: boolean;
+  onMoveUp?: () => void;
+  onMoveDown?: () => void;
 }
 
-export function TaskItem({ task, index = 0, compact = false, isSubtask = false }: TaskItemProps) {
+export function TaskItem({
+  task,
+  index = 0,
+  compact = false,
+  isSubtask = false,
+  canMoveUp = false,
+  canMoveDown = false,
+  isReordering = false,
+  onMoveUp,
+  onMoveDown,
+}: TaskItemProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [newSubtaskTitle, setNewSubtaskTitle] = useState("");
@@ -219,6 +234,39 @@ export function TaskItem({ task, index = 0, compact = false, isSubtask = false }
             )}
           </div>
         </CollapsibleTrigger>
+
+        {!compact && !isSubtask && (onMoveUp || onMoveDown) && (
+          <div className="flex shrink-0 items-center gap-1">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 text-muted-foreground hover:text-foreground"
+              onClick={(event) => {
+                event.stopPropagation();
+                onMoveUp?.();
+              }}
+              disabled={!canMoveUp || isReordering}
+              aria-label="Move task up"
+            >
+              <ArrowUp className="h-4 w-4" />
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 text-muted-foreground hover:text-foreground"
+              onClick={(event) => {
+                event.stopPropagation();
+                onMoveDown?.();
+              }}
+              disabled={!canMoveDown || isReordering}
+              aria-label="Move task down"
+            >
+              <ArrowDown className="h-4 w-4" />
+            </Button>
+          </div>
+        )}
 
         {/* Compact: assignee pill + due date inline */}
         {compact && !isOpen && (

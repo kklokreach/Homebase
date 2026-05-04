@@ -28,6 +28,51 @@ type Note = {
   updatedAt: string;
 };
 
+const NOTE_DRAFTS_KEY = "homebase:noteDrafts:v1";
+
+type NoteDraft = {
+  title: string;
+  body: string;
+  savedAt: string;
+};
+
+function readNoteDrafts(): Record<string, NoteDraft> {
+  if (typeof window === "undefined") return {};
+
+  try {
+    const raw = window.localStorage.getItem(NOTE_DRAFTS_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+    return parsed as Record<string, NoteDraft>;
+  } catch {
+    return {};
+  }
+}
+
+function getNoteDraft(noteId: number) {
+  return readNoteDrafts()[String(noteId)] ?? null;
+}
+
+function saveNoteDraft(noteId: number, draft: Pick<NoteDraft, "title" | "body">) {
+  if (typeof window === "undefined") return;
+
+  const drafts = readNoteDrafts();
+  drafts[String(noteId)] = {
+    ...draft,
+    savedAt: new Date().toISOString(),
+  };
+  window.localStorage.setItem(NOTE_DRAFTS_KEY, JSON.stringify(drafts));
+}
+
+function clearNoteDraft(noteId: number) {
+  if (typeof window === "undefined") return;
+
+  const drafts = readNoteDrafts();
+  delete drafts[String(noteId)];
+  window.localStorage.setItem(NOTE_DRAFTS_KEY, JSON.stringify(drafts));
+}
+
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await apiFetch(`/api${path}`, {
     ...init,
@@ -67,6 +112,7 @@ export default function Notes() {
   const [search, setSearch] = useState("");
   const [draftTitle, setDraftTitle] = useState("");
   const [draftBody, setDraftBody] = useState("");
+  const [draftNoteId, setDraftNoteId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -120,12 +166,27 @@ export default function Notes() {
     if (!selectedNote) {
       setDraftTitle("");
       setDraftBody("");
+      setDraftNoteId(null);
       return;
     }
 
-    setDraftTitle(selectedNote.title);
-    setDraftBody(selectedNote.body);
+    const savedDraft = getNoteDraft(selectedNote.id);
+    setDraftTitle(savedDraft?.title ?? selectedNote.title);
+    setDraftBody(savedDraft?.body ?? selectedNote.body);
+    setDraftNoteId(selectedNote.id);
   }, [selectedNote]);
+
+  useEffect(() => {
+    if (!selectedNote) return;
+    if (draftNoteId !== selectedNote.id) return;
+
+    if (draftTitle === selectedNote.title && draftBody === selectedNote.body) {
+      clearNoteDraft(selectedNote.id);
+      return;
+    }
+
+    saveNoteDraft(selectedNote.id, { title: draftTitle, body: draftBody });
+  }, [draftBody, draftNoteId, draftTitle, selectedNote]);
 
   const handleCreate = async () => {
     if (creating) return;
@@ -142,6 +203,7 @@ export default function Notes() {
       setSelectedId(note.id);
       setDraftTitle(note.title);
       setDraftBody(note.body);
+      setDraftNoteId(note.id);
     } catch (err) {
       toast({
         title: "Failed to create note",
@@ -163,6 +225,7 @@ export default function Notes() {
         body: JSON.stringify({ title: draftTitle.trim(), body: draftBody }),
       });
 
+      clearNoteDraft(note.id);
       setNotes((current) => [note, ...current.filter((item) => item.id !== note.id)]);
       setSelectedId(note.id);
       toast({ title: "Note saved" });
@@ -183,6 +246,7 @@ export default function Notes() {
     try {
       setDeleting(true);
       await api<void>(`/notes/${selectedNote.id}`, { method: "DELETE" });
+      clearNoteDraft(selectedNote.id);
       const remaining = notes.filter((note) => note.id !== selectedNote.id);
       setNotes(remaining);
       setSelectedId(remaining[0]?.id ?? null);

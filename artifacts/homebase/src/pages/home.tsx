@@ -7,7 +7,12 @@ import { TaskQuickAdd } from "@/components/task-quick-add";
 import { Skeleton } from "@/components/ui/skeleton";
 
 function fmt(n: number) {
-  return n.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
+  return n.toLocaleString("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
 }
 
 function homeLoadErrorMessage(error: unknown) {

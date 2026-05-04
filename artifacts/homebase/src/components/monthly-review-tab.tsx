@@ -93,7 +93,8 @@ function fmt(n: number, showSign = false) {
   const abs = Math.abs(n).toLocaleString("en-US", {
     style: "currency",
     currency: "USD",
-    maximumFractionDigits: 0,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
   });
   if (showSign && n > 0) return `+${abs}`;
   if (n < 0) return `-${abs}`;

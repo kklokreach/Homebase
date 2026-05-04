@@ -11,8 +11,53 @@ import {
 } from "@workspace/api-zod";
 
 const router: IRouter = Router();
+const COMPLETED_TASK_VISIBILITY_DAYS = 3;
 
 type TaskRow = typeof tasksTable.$inferSelect;
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function completedTaskVisibilityCutoff() {
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - COMPLETED_TASK_VISIBILITY_DAYS);
+  return cutoff;
+}
+
+function defaultTaskVisibilityCondition() {
+  return (
+    or(
+      eq(tasksTable.completed, false),
+      gte(tasksTable.completedAt, completedTaskVisibilityCutoff()),
+    ) ?? sql`true`
+  );
+}
+
+function parseTaskReorderBody(body: unknown) {
+  if (!isPlainObject(body) || !Array.isArray(body["orderedIds"])) return null;
+
+  const orderedIds = body["orderedIds"];
+  if (
+    orderedIds.length === 0 ||
+    !orderedIds.every((id) => Number.isInteger(id) && id > 0) ||
+    new Set(orderedIds).size !== orderedIds.length
+  ) {
+    return null;
+  }
+
+  const rawParentTaskId = body["parentTaskId"];
+  const parentTaskId =
+    rawParentTaskId === undefined || rawParentTaskId === null
+      ? null
+      : Number(rawParentTaskId);
+
+  if (parentTaskId !== null && (!Number.isInteger(parentTaskId) || parentTaskId <= 0)) {
+    return null;
+  }
+
+  return { orderedIds: orderedIds as number[], parentTaskId };
+}
 
 async function getTaskById(id: number) {
   const [task] = await db.select().from(tasksTable).where(eq(tasksTable.id, id));
@@ -169,6 +214,8 @@ router.get("/tasks", async (req, res): Promise<void> => {
 
   if (completed !== undefined) {
     conditions.push(eq(tasksTable.completed, completed));
+  } else {
+    conditions.push(defaultTaskVisibilityCondition());
   }
 
   if (view === "today") {
@@ -197,7 +244,7 @@ router.get("/tasks", async (req, res): Promise<void> => {
     .select()
     .from(tasksTable)
     .where(and(...conditions))
-    .orderBy(tasksTable.dueDate, tasksTable.sortOrder, tasksTable.createdAt);
+    .orderBy(tasksTable.sortOrder, tasksTable.dueDate, tasksTable.createdAt);
 
   const subtasksMap = await getDirectSubtasks(tasks.map((task) => task.id));
   res.json(await Promise.all(tasks.map((task) => serializeTask(task, subtasksMap))));
@@ -217,11 +264,15 @@ router.post("/tasks", async (req, res): Promise<void> => {
   }
 
   let sortOrder = parsed.data.sortOrder ?? 0;
-  if (parsed.data.parentTaskId != null && parsed.data.sortOrder === undefined) {
+  if (parsed.data.sortOrder === undefined) {
     const siblings = await db
       .select({ count: sql<number>`count(*)` })
       .from(tasksTable)
-      .where(eq(tasksTable.parentTaskId, parsed.data.parentTaskId));
+      .where(
+        parsed.data.parentTaskId != null
+          ? eq(tasksTable.parentTaskId, parsed.data.parentTaskId)
+          : isNull(tasksTable.parentTaskId),
+      );
     sortOrder = Number(siblings[0]?.count ?? 0);
   }
 
@@ -286,6 +337,42 @@ router.get("/tasks/summary/today", async (_req, res): Promise<void> => {
     totalToday: me.length + wife.length + shared.length,
     completedToday: Number(completedToday[0]?.count ?? 0),
   });
+});
+
+router.put("/tasks/reorder", async (req, res): Promise<void> => {
+  const parsed = parseTaskReorderBody(req.body);
+  if (!parsed) {
+    res.status(400).json({ error: "orderedIds must be a non-empty array of unique task ids" });
+    return;
+  }
+
+  const tasks = await db
+    .select({ id: tasksTable.id, parentTaskId: tasksTable.parentTaskId })
+    .from(tasksTable)
+    .where(inArray(tasksTable.id, parsed.orderedIds));
+  const tasksById = new Map(tasks.map((task) => [task.id, task]));
+
+  if (parsed.orderedIds.some((id) => !tasksById.has(id))) {
+    res.status(404).json({ error: "One or more tasks were not found" });
+    return;
+  }
+
+  if (
+    parsed.orderedIds.some(
+      (id) => (tasksById.get(id)?.parentTaskId ?? null) !== parsed.parentTaskId,
+    )
+  ) {
+    res.status(400).json({ error: "Tasks can only be reordered among siblings" });
+    return;
+  }
+
+  await Promise.all(
+    parsed.orderedIds.map((id, index) =>
+      db.update(tasksTable).set({ sortOrder: index }).where(eq(tasksTable.id, id)),
+    ),
+  );
+
+  res.sendStatus(204);
 });
 
 router.get("/tasks/:id", async (req, res): Promise<void> => {

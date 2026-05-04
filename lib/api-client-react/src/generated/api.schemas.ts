@@ -85,6 +85,7 @@ export interface BudgetCategory {
   name: string;
   icon?: string | null;
   color?: string | null;
+  groupName?: string | null;
   sortOrder: number;
 }
 
@@ -92,6 +93,7 @@ export interface CreateBudgetCategoryBody {
   name: string;
   icon?: string | null;
   color?: string | null;
+  groupName?: string | null;
   sortOrder?: number;
 }
 
@@ -99,6 +101,7 @@ export interface UpdateBudgetCategoryBody {
   name?: string;
   icon?: string | null;
   color?: string | null;
+  groupName?: string | null;
   sortOrder?: number;
 }
 
@@ -147,6 +150,7 @@ export interface UpdateTransactionBody {
 export interface BudgetCategoryLine {
   categoryId: number;
   categoryName: string;
+  categoryGroupName?: string | null;
   budgeted: number;
   rollover: number;
   available: number;
@@ -162,6 +166,9 @@ export interface BudgetDashboard {
   totalAvailable: number;
   totalSpent: number;
   totalLeft: number;
+  incomeAmount?: number;
+  incomeRemaining?: number;
+  budgetOverUnder?: number;
   categories: BudgetCategoryLine[];
   recentTransactions: Transaction[];
 }
@@ -191,6 +198,8 @@ export type HomeSnapshotBudgetSnapshot = {
   totalAvailable: number;
   totalSpent: number;
   totalLeft: number;
+  incomeAmount?: number;
+  incomeRemaining?: number;
   month: number;
   year: number;
 };

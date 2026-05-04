@@ -61,7 +61,8 @@ function money(n: number) {
   return n.toLocaleString("en-US", {
     style: "currency",
     currency: "USD",
-    maximumFractionDigits: 0,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
   });
 }
 
@@ -69,8 +70,10 @@ export default function Settings() {
   const now = new Date();
   const [viewDate, setViewDate] = useState(new Date(now.getFullYear(), now.getMonth(), 1));
   const [newCategoryName, setNewCategoryName] = useState("");
+  const [newCategoryGroup, setNewCategoryGroup] = useState("");
   const [editingId, setEditingId] = useState<number | null>(null);
   const [draftName, setDraftName] = useState("");
+  const [draftGroup, setDraftGroup] = useState("");
   const [budgetDrafts, setBudgetDrafts] = useState<Record<number, string>>({});
   const [savingBudgetId, setSavingBudgetId] = useState<number | null>(null);
 
@@ -117,9 +120,13 @@ export default function Settings() {
     try {
       await api("/budget/categories", {
         method: "POST",
-        body: JSON.stringify({ name: newCategoryName.trim() }),
+        body: JSON.stringify({
+          name: newCategoryName.trim(),
+          groupName: newCategoryGroup.trim() || null,
+        }),
       });
       setNewCategoryName("");
+      setNewCategoryGroup("");
       refresh();
       toast({ title: "Category added" });
     } catch {
@@ -145,10 +152,14 @@ export default function Settings() {
     try {
       await api(`/budget/categories/${id}`, {
         method: "PUT",
-        body: JSON.stringify({ name: draftName.trim() }),
+        body: JSON.stringify({
+          name: draftName.trim(),
+          groupName: draftGroup.trim() || null,
+        }),
       });
       setEditingId(null);
       setDraftName("");
+      setDraftGroup("");
       refresh();
       toast({ title: "Category updated" });
     } catch {
@@ -213,11 +224,17 @@ export default function Settings() {
             </div>
           </div>
 
-          <form onSubmit={handleAddCategory} className="flex gap-2">
+          <form onSubmit={handleAddCategory} className="grid gap-2 md:grid-cols-[minmax(0,1fr)_220px_auto]">
             <Input
               value={newCategoryName}
               onChange={(e) => setNewCategoryName(e.target.value)}
               placeholder="New category name..."
+              className="bg-background border-border/50"
+            />
+            <Input
+              value={newCategoryGroup}
+              onChange={(e) => setNewCategoryGroup(e.target.value)}
+              placeholder="Group"
               className="bg-background border-border/50"
             />
             <Button type="submit">
@@ -253,6 +270,9 @@ export default function Settings() {
                           <div className="min-w-0">
                             <div className="font-medium">{cat.name}</div>
                             <div className="text-xs text-muted-foreground">
+                              {cat.groupName?.trim() || "Ungrouped"}
+                            </div>
+                            <div className="text-xs text-muted-foreground">
                               Available {money(row?.available ?? 0)} · Spent {money(row?.spent ?? 0)} · Left {money(row?.left ?? 0)}
                             </div>
                           </div>
@@ -263,6 +283,7 @@ export default function Settings() {
                               onClick={() => {
                                 setEditingId(cat.id);
                                 setDraftName(cat.name);
+                                setDraftGroup(cat.groupName ?? "");
                               }}
                             >
                               <Pencil className="h-4 w-4" />
@@ -278,11 +299,17 @@ export default function Settings() {
                         </>
                       ) : (
                         <>
-                          <Input
-                            value={draftName}
-                            onChange={(e) => setDraftName(e.target.value)}
-                            className="max-w-sm"
-                          />
+                          <div className="grid flex-1 gap-2 md:grid-cols-2">
+                            <Input
+                              value={draftName}
+                              onChange={(e) => setDraftName(e.target.value)}
+                            />
+                            <Input
+                              value={draftGroup}
+                              onChange={(e) => setDraftGroup(e.target.value)}
+                              placeholder="Group"
+                            />
+                          </div>
                           <div className="flex gap-2">
                             <Button size="icon" onClick={() => handleSaveCategory(cat.id)}>
                               <Save className="h-4 w-4" />
@@ -293,6 +320,7 @@ export default function Settings() {
                               onClick={() => {
                                 setEditingId(null);
                                 setDraftName("");
+                                setDraftGroup("");
                               }}
                             >
                               <X className="h-4 w-4" />

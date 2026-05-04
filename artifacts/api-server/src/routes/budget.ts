@@ -1,6 +1,12 @@
 import { Router, type IRouter } from "express";
-import { and, eq, or, lt, sql } from "drizzle-orm";
-import { db, budgetCategoriesTable, monthlyBudgetsTable, transactionsTable } from "@workspace/db";
+import { and, eq, inArray, or, lt, sql } from "drizzle-orm";
+import {
+  db,
+  budgetCategoriesTable,
+  monthlyBudgetsTable,
+  monthlyIncomeTable,
+  transactionsTable,
+} from "@workspace/db";
 import { parsePositiveIntParam, sendInvalidId } from "../lib/http";
 import {
   CreateBudgetCategoryBody,
@@ -25,6 +31,46 @@ function currentYearMonth() {
   return { year: now.getFullYear(), month: now.getMonth() + 1 };
 }
 
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function parseOrderedIds(body: unknown) {
+  if (!isPlainObject(body) || !Array.isArray(body["orderedIds"])) return null;
+
+  const orderedIds = body["orderedIds"];
+  if (
+    orderedIds.length === 0 ||
+    !orderedIds.every((id) => Number.isInteger(id) && id > 0) ||
+    new Set(orderedIds).size !== orderedIds.length
+  ) {
+    return null;
+  }
+
+  return orderedIds as number[];
+}
+
+function parseYearMonthValues(source: Record<string, unknown>) {
+  const year = Number(source["year"]);
+  const month = Number(source["month"]);
+
+  if (!Number.isInteger(year) || year < 2000 || year > 9999) return null;
+  if (!Number.isInteger(month) || month < 1 || month > 12) return null;
+
+  return { year, month };
+}
+
+function parseMonthlyIncomeBody(body: unknown) {
+  if (!isPlainObject(body)) return null;
+
+  const parsed = parseYearMonthValues(body);
+  const amount = Number(body["amount"]);
+
+  if (!parsed || !Number.isFinite(amount) || amount < 0) return null;
+
+  return { ...parsed, amount };
+}
+
 // ── Budget Categories ─────────────────────────────────────────────────────
 
 router.get("/budget/categories", async (_req, res): Promise<void> => {
@@ -47,10 +93,40 @@ router.post("/budget/categories", async (req, res): Promise<void> => {
       name: parsed.data.name,
       icon: parsed.data.icon ?? null,
       color: parsed.data.color ?? null,
+      groupName: parsed.data.groupName?.trim() || null,
       sortOrder: parsed.data.sortOrder ?? 0,
     })
     .returning();
   res.status(201).json(cat);
+});
+
+router.put("/budget/categories/reorder", async (req, res): Promise<void> => {
+  const orderedIds = parseOrderedIds(req.body);
+  if (!orderedIds) {
+    res.status(400).json({ error: "orderedIds must be a non-empty array of unique category ids" });
+    return;
+  }
+
+  const existing = await db
+    .select({ id: budgetCategoriesTable.id })
+    .from(budgetCategoriesTable)
+    .where(inArray(budgetCategoriesTable.id, orderedIds));
+  const existingIds = new Set(existing.map((cat) => cat.id));
+  if (orderedIds.some((id) => !existingIds.has(id))) {
+    res.status(404).json({ error: "One or more categories were not found" });
+    return;
+  }
+
+  await Promise.all(
+    orderedIds.map((id, index) =>
+      db
+        .update(budgetCategoriesTable)
+        .set({ sortOrder: index })
+        .where(eq(budgetCategoriesTable.id, id)),
+    ),
+  );
+
+  res.sendStatus(204);
 });
 
 router.put("/budget/categories/:id", async (req, res): Promise<void> => {
@@ -69,6 +145,7 @@ router.put("/budget/categories/:id", async (req, res): Promise<void> => {
   if (d.name !== undefined) updates.name = d.name;
   if ("icon" in d) updates.icon = d.icon ?? null;
   if ("color" in d) updates.color = d.color ?? null;
+  if ("groupName" in d) updates.groupName = d.groupName?.trim() || null;
   if (d.sortOrder !== undefined) updates.sortOrder = d.sortOrder;
 
   const [cat] = await db
@@ -154,6 +231,60 @@ router.post("/budget/monthly", async (req, res): Promise<void> => {
 
 // ── Transactions ──────────────────────────────────────────────────────────
 
+// Monthly Income
+router.get("/budget/income", async (req, res): Promise<void> => {
+  const parsed = parseYearMonthValues(req.query as Record<string, unknown>);
+  if (!parsed) {
+    res.status(400).json({ error: "year and month are required" });
+    return;
+  }
+
+  const [income] = await db
+    .select()
+    .from(monthlyIncomeTable)
+    .where(and(eq(monthlyIncomeTable.year, parsed.year), eq(monthlyIncomeTable.month, parsed.month)));
+
+  res.json({
+    year: parsed.year,
+    month: parsed.month,
+    amount: Number(income?.amount ?? 0),
+  });
+});
+
+router.put("/budget/income", async (req, res): Promise<void> => {
+  const parsed = parseMonthlyIncomeBody(req.body);
+  if (!parsed) {
+    res.status(400).json({ error: "year, month, and a non-negative amount are required" });
+    return;
+  }
+
+  const existing = await db
+    .select()
+    .from(monthlyIncomeTable)
+    .where(and(eq(monthlyIncomeTable.year, parsed.year), eq(monthlyIncomeTable.month, parsed.month)));
+
+  const [income] =
+    existing.length > 0
+      ? await db
+          .update(monthlyIncomeTable)
+          .set({ amount: String(parsed.amount), updatedAt: new Date() })
+          .where(eq(monthlyIncomeTable.id, existing[0].id))
+          .returning()
+      : await db
+          .insert(monthlyIncomeTable)
+          .values({ year: parsed.year, month: parsed.month, amount: String(parsed.amount) })
+          .returning();
+
+  res.json({
+    id: income.id,
+    year: income.year,
+    month: income.month,
+    amount: Number(income.amount),
+    updatedAt: income.updatedAt.toISOString(),
+  });
+});
+
+// Transactions
 router.get("/transactions", async (req, res): Promise<void> => {
   const parsed = ListTransactionsQueryParams.safeParse(req.query);
   if (!parsed.success) {
@@ -383,6 +514,11 @@ router.get("/budget/dashboard", async (req, res): Promise<void> => {
     .from(transactionsTable)
     .where(sql`${transactionsTable.date} LIKE ${prefix + "%"}`);
 
+  const [monthlyIncome] = await db
+    .select()
+    .from(monthlyIncomeTable)
+    .where(and(eq(monthlyIncomeTable.year, year), eq(monthlyIncomeTable.month, month)));
+
   // Full chain rollover for every category
   const rollovers = await computeRollovers(categories, year, month);
 
@@ -400,6 +536,7 @@ router.get("/budget/dashboard", async (req, res): Promise<void> => {
     return {
       categoryId: cat.id,
       categoryName: cat.name,
+      categoryGroupName: cat.groupName,
       budgeted,
       rollover,
       available,
@@ -413,6 +550,8 @@ router.get("/budget/dashboard", async (req, res): Promise<void> => {
   const totalAvailable = lines.reduce((s, l) => s + l.available, 0);
   const totalSpent = lines.reduce((s, l) => s + l.spent, 0);
   const totalLeft = lines.reduce((s, l) => s + l.left, 0);
+  const incomeAmount = Number(monthlyIncome?.amount ?? 0);
+  const incomeRemaining = incomeAmount - totalSpent;
 
   const recentTxns = await db
     .select({
@@ -439,6 +578,9 @@ router.get("/budget/dashboard", async (req, res): Promise<void> => {
     totalAvailable,
     totalSpent,
     totalLeft,
+    incomeAmount,
+    incomeRemaining,
+    budgetOverUnder: totalLeft,
     categories: lines,
     recentTransactions: recentTxns.map(serializeTransaction),
   });
@@ -515,6 +657,7 @@ router.get("/home/snapshot", async (_req, res): Promise<void> => {
     .from(tasksTable)
     .where(
       and(
+        isNullFn(tasksTable.parentTaskId),
         eq(tasksTable.completed, false),
         orFn(
           eq(tasksTable.dueDate, today),
@@ -522,7 +665,7 @@ router.get("/home/snapshot", async (_req, res): Promise<void> => {
         ),
       ),
     )
-    .orderBy(tasksTable.createdAt);
+    .orderBy(tasksTable.sortOrder, tasksTable.createdAt);
 
   const me = tasks.filter((t) => t.assignee === "me").map(serializeTask);
   const wife = tasks.filter((t) => t.assignee === "wife").map(serializeTask);
@@ -539,6 +682,10 @@ router.get("/home/snapshot", async (_req, res): Promise<void> => {
   const txns = await db.select().from(transactionsTable).where(
     sql`${transactionsTable.date} LIKE ${prefix + "%"}`,
   );
+  const [monthlyIncome] = await db
+    .select()
+    .from(monthlyIncomeTable)
+    .where(and(eq(monthlyIncomeTable.year, year), eq(monthlyIncomeTable.month, month)));
 
   const snapshotRollovers = await computeRollovers(categories, year, month);
   const totalBudgeted = budgets.reduce((s, b) => s + Number(b.budgetAmount), 0);
@@ -546,6 +693,7 @@ router.get("/home/snapshot", async (_req, res): Promise<void> => {
   const totalSpent = txns.reduce((s, t) => s + Number(t.amount), 0);
   const totalAvailable = totalBudgeted + totalRollover;
   const totalLeft = totalAvailable - totalSpent;
+  const incomeAmount = Number(monthlyIncome?.amount ?? 0);
 
   // Recent transactions
   const recentTxns = await db
@@ -561,6 +709,7 @@ router.get("/home/snapshot", async (_req, res): Promise<void> => {
     })
     .from(transactionsTable)
     .leftJoin(budgetCategoriesTable, eq(transactionsTable.categoryId, budgetCategoriesTable.id))
+    .where(sql`${transactionsTable.date} LIKE ${prefix + "%"}`)
     .orderBy(sql`${transactionsTable.date} DESC`)
     .limit(5);
 
@@ -576,6 +725,8 @@ router.get("/home/snapshot", async (_req, res): Promise<void> => {
       totalAvailable,
       totalSpent,
       totalLeft,
+      incomeAmount,
+      incomeRemaining: incomeAmount - totalSpent,
       month,
       year,
     },

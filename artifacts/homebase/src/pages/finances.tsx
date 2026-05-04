@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { format, addMonths, subMonths } from "date-fns";
-import { ChevronLeft, ChevronRight, Pencil, Save, Trash2, X, Wallet } from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight, Pencil, Save, Trash2, X, Wallet } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useGetBudgetDashboard,
   useListBudgetCategories,
   getGetBudgetDashboardQueryKey,
   getGetHomeSnapshotQueryKey,
+  getListBudgetCategoriesQueryKey,
   getListTransactionsQueryKey,
 } from "@workspace/api-client-react";
 import {
@@ -33,6 +34,7 @@ type Category = {
   name: string;
   icon?: string | null;
   color?: string | null;
+  groupName?: string | null;
   sortOrder: number;
 };
 
@@ -50,11 +52,19 @@ type Transaction = {
 type DashboardCategory = {
   categoryId: number;
   categoryName: string;
+  categoryGroupName?: string | null;
   budgeted: number;
   rollover: number;
   available: number;
   spent: number;
   left: number;
+};
+
+type DashboardWithIncome = {
+  incomeAmount?: number;
+  incomeRemaining?: number;
+  budgetOverUnder?: number;
+  categories: DashboardCategory[];
 };
 
 type TransactionGroup = {
@@ -112,7 +122,8 @@ function fmt(n: number, showSign = false) {
   const abs = Math.abs(n).toLocaleString("en-US", {
     style: "currency",
     currency: "USD",
-    maximumFractionDigits: 0,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
   });
   if (showSign && n > 0) return `+${abs}`;
   if (n < 0) return `-${abs}`;
@@ -396,6 +407,9 @@ export default function Finances() {
   const [reserveTransactionDraft, setReserveTransactionDraft] = useState<ReserveTransactionDraft>(() =>
     emptyReserveTransactionDraft(0)
   );
+  const [incomeDraft, setIncomeDraft] = useState("");
+  const [savingIncome, setSavingIncome] = useState(false);
+  const [reorderingCategoryId, setReorderingCategoryId] = useState<number | null>(null);
 
   const year = viewDate.getFullYear();
   const month = viewDate.getMonth() + 1;
@@ -410,6 +424,8 @@ export default function Finances() {
   );
 
   const { data: categories = [] } = useListBudgetCategories();
+  const dashboardView = dashboard as (typeof dashboard & DashboardWithIncome) | undefined;
+  const dashboardCategories = (dashboardView?.categories ?? []) as DashboardCategory[];
 
   async function refreshTransactions() {
     try {
@@ -445,6 +461,7 @@ export default function Finances() {
     queryClient.invalidateQueries({
       queryKey: getGetBudgetDashboardQueryKey({ year, month }),
     });
+    queryClient.invalidateQueries({ queryKey: getListBudgetCategoriesQueryKey() });
     queryClient.invalidateQueries({ queryKey: getListTransactionsQueryKey() });
     queryClient.invalidateQueries({ queryKey: getGetHomeSnapshotQueryKey() });
     refreshTransactions();
@@ -455,8 +472,60 @@ export default function Finances() {
   }, [year, month]);
 
   useEffect(() => {
+    if (!dashboardView) return;
+    setIncomeDraft(String(dashboardView.incomeAmount ?? 0));
+  }, [dashboardView?.incomeAmount, year, month]);
+
+  useEffect(() => {
     refreshReserves();
   }, []);
+
+  async function saveIncome(e: React.FormEvent) {
+    e.preventDefault();
+    const amount = parseFloat(incomeDraft || "0") || 0;
+
+    try {
+      setSavingIncome(true);
+      await api("/budget/income", {
+        method: "PUT",
+        body: JSON.stringify({ year, month, amount }),
+      });
+      refreshAll();
+      toast({ title: "Income updated" });
+    } catch {
+      toast({ title: "Failed to update income", variant: "destructive" });
+    } finally {
+      setSavingIncome(false);
+    }
+  }
+
+  async function reorderCategory(categoryId: number, direction: "up" | "down") {
+    const index = dashboardCategories.findIndex((cat) => cat.categoryId === categoryId);
+    const nextIndex = direction === "up" ? index - 1 : index + 1;
+    if (index < 0 || nextIndex < 0 || nextIndex >= dashboardCategories.length) return;
+
+    const reordered = [...dashboardCategories];
+    const currentCategory = reordered[index];
+    const nextCategory = reordered[nextIndex];
+    if (!currentCategory || !nextCategory) return;
+    reordered[index] = nextCategory;
+    reordered[nextIndex] = currentCategory;
+
+    try {
+      setReorderingCategoryId(categoryId);
+      await api<void>("/budget/categories/reorder", {
+        method: "PUT",
+        body: JSON.stringify({
+          orderedIds: reordered.map((cat) => cat.categoryId),
+        }),
+      });
+      refreshAll();
+    } catch {
+      toast({ title: "Failed to reorder category", variant: "destructive" });
+    } finally {
+      setReorderingCategoryId(null);
+    }
+  }
 
   function startEditTx(tx: Transaction) {
     const groupKey = tx.categoryId == null ? "uncategorized" : `category-${tx.categoryId}`;
@@ -696,6 +765,23 @@ export default function Finances() {
     return groups;
   }, [categories, transactions, txCategoryName]);
 
+  const categoryGroups = useMemo(() => {
+    const groups = new Map<string, { label: string; categories: DashboardCategory[] }>();
+
+    for (const cat of dashboardCategories) {
+      const label = cat.categoryGroupName?.trim() || "Ungrouped";
+      const key = label.toLocaleLowerCase();
+
+      if (!groups.has(key)) {
+        groups.set(key, { label, categories: [] });
+      }
+
+      groups.get(key)!.categories.push(cat);
+    }
+
+    return Array.from(groups.values());
+  }, [dashboardCategories]);
+
   const uncategorizedGroup = groupedTransactions.get("uncategorized");
   const allTransactionsSorted = useMemo(() => {
     return [...transactions].sort((a, b) => {
@@ -713,6 +799,130 @@ export default function Finances() {
     }
     return grouped;
   }, [reserveTransactions]);
+
+  function renderBudgetCategory(cat: DashboardCategory) {
+    const percent =
+      cat.available > 0
+        ? Math.max(0, Math.min(100, (cat.spent / cat.available) * 100))
+        : 0;
+    const groupKey = `category-${cat.categoryId}`;
+    const group = groupedTransactions.get(groupKey);
+    const index = dashboardCategories.findIndex((item) => item.categoryId === cat.categoryId);
+
+    return (
+      <AccordionItem key={cat.categoryId} value={groupKey} className="overflow-hidden rounded-xl border">
+        <div className="flex items-stretch">
+          <div className="flex shrink-0 flex-col justify-center gap-1 border-r bg-muted/20 px-1.5">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 text-muted-foreground hover:text-foreground"
+              onClick={() => reorderCategory(cat.categoryId, "up")}
+              disabled={index <= 0 || reorderingCategoryId === cat.categoryId}
+              aria-label={`Move ${cat.categoryName} up`}
+            >
+              <ArrowUp className="h-4 w-4" />
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 text-muted-foreground hover:text-foreground"
+              onClick={() => reorderCategory(cat.categoryId, "down")}
+              disabled={index < 0 || index >= dashboardCategories.length - 1 || reorderingCategoryId === cat.categoryId}
+              aria-label={`Move ${cat.categoryName} down`}
+            >
+              <ArrowDown className="h-4 w-4" />
+            </Button>
+          </div>
+
+          <AccordionTrigger className="flex-1 px-3 py-3 hover:no-underline">
+            <div className="flex min-w-0 flex-1 flex-col gap-3 pr-3 text-left">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="font-medium">{cat.categoryName}</div>
+                  <div className="text-xs text-muted-foreground">
+                    Budgeted {fmt(cat.budgeted)} / Rollover {fmt(cat.rollover, true)}
+                  </div>
+                </div>
+
+                <div
+                  className={cn(
+                    "text-sm font-medium whitespace-nowrap",
+                    cat.left < 0
+                      ? "text-destructive"
+                      : cat.left === 0
+                      ? "text-muted-foreground"
+                      : "text-primary"
+                  )}
+                >
+                  Left {fmt(cat.left)}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-2 text-sm">
+                <div className="rounded-lg bg-muted/40 px-3 py-2">
+                  <div className="text-xs text-muted-foreground">Available</div>
+                  <div className="font-medium">{fmt(cat.available)}</div>
+                </div>
+                <div className="rounded-lg bg-muted/40 px-3 py-2">
+                  <div className="text-xs text-muted-foreground">Spent</div>
+                  <div className="font-medium">{fmt(cat.spent)}</div>
+                </div>
+                <div className="rounded-lg bg-muted/40 px-3 py-2">
+                  <div className="text-xs text-muted-foreground">Remaining</div>
+                  <div
+                    className={cn(
+                      "font-medium",
+                      cat.left < 0 ? "text-destructive" : "text-primary"
+                    )}
+                  >
+                    {fmt(cat.left)}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between gap-3">
+                <div className="h-2 flex-1 rounded-full bg-muted overflow-hidden">
+                  <div
+                    className={cn(
+                      "h-full",
+                      cat.left < 0 ? "bg-destructive" : "bg-primary"
+                    )}
+                    style={{ width: `${percent}%` }}
+                  />
+                </div>
+                <div className="shrink-0 text-xs text-muted-foreground">
+                  {txLoading
+                    ? "Loading transactions..."
+                    : `${group?.count ?? 0} transaction${group?.count === 1 ? "" : "s"}`}
+                </div>
+              </div>
+            </div>
+          </AccordionTrigger>
+        </div>
+
+        <AccordionContent className="border-t px-3 pt-3">
+          {txLoading ? (
+            <div className="space-y-2">
+              {[1, 2].map((i) => (
+                <Skeleton key={i} className="h-20 rounded-xl" />
+              ))}
+            </div>
+          ) : !group || group.transactions.length === 0 ? (
+            <div className="pb-1 text-sm text-muted-foreground">
+              No transactions in this category for this month.
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {group.transactions.map((tx) => renderTransactionCard(tx))}
+            </div>
+          )}
+        </AccordionContent>
+      </AccordionItem>
+    );
+  }
 
   function renderTransactionCard(tx: Transaction) {
     const editing = editingTxId === tx.id;
@@ -964,23 +1174,66 @@ export default function Finances() {
               </div>
             </div>
 
-            <div className="grid gap-3 md:grid-cols-4">
+            <form onSubmit={saveIncome} className="rounded-2xl border bg-card p-4 shadow-sm">
+              <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_220px_auto] md:items-end">
+                <div>
+                  <div className="text-sm text-muted-foreground">Income</div>
+                  <div
+                    className={cn(
+                      "mt-1 text-sm font-medium",
+                      (dashboardView?.incomeRemaining ?? 0) < 0 ? "text-destructive" : "text-primary",
+                    )}
+                  >
+                    Income left {fmt(dashboardView?.incomeRemaining ?? 0)}
+                  </div>
+                </div>
+                <Input
+                  inputMode="decimal"
+                  value={incomeDraft}
+                  onChange={(e) => setIncomeDraft(e.target.value.replace(/[^0-9.]/g, ""))}
+                  placeholder="0.00"
+                />
+                <Button type="submit" disabled={savingIncome}>
+                  <Save className="mr-2 h-4 w-4" />
+                  {savingIncome ? "Saving..." : "Save"}
+                </Button>
+              </div>
+            </form>
+
+            <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-6">
               {[
-                { label: "Budgeted", value: fmt(dashboard.totalBudgeted), color: "" },
                 {
-                  label: "Rollover",
-                  value: fmt(dashboard.totalRollover, true),
-                  color:
-                    dashboard.totalRollover >= 0 ? "text-primary" : "text-destructive",
+                  label: "Income",
+                  value: fmt(dashboardView?.incomeAmount ?? 0),
+                  color: "text-primary",
                 },
+                {
+                  label: "Spent",
+                  value: fmt(dashboard.totalSpent),
+                  color: "",
+                },
+                {
+                  label: "Income left",
+                  value: fmt(dashboardView?.incomeRemaining ?? 0),
+                  color:
+                    (dashboardView?.incomeRemaining ?? 0) < 0
+                      ? "text-destructive"
+                      : "text-primary",
+                },
+                { label: "Budgeted", value: fmt(dashboard.totalBudgeted), color: "" },
                 {
                   label: "Available",
                   value: fmt(dashboard.totalAvailable),
                   color: "text-primary",
                 },
                 {
-                  label: "Left",
-                  value: fmt(dashboard.totalLeft),
+                  label:
+                    dashboard.totalLeft === 0
+                      ? "On budget"
+                      : dashboard.totalLeft < 0
+                      ? "Over budget"
+                      : "Under budget",
+                  value: fmt(Math.abs(dashboard.totalLeft)),
                   color:
                     dashboard.totalLeft < 0 ? "text-destructive" : "text-secondary",
                 },
@@ -1004,7 +1257,16 @@ export default function Finances() {
                 onValueChange={setOpenTransactionGroups}
                 className="space-y-3"
               >
-                {(dashboard.categories as DashboardCategory[]).map((cat) => {
+                {categoryGroups.map((group) => (
+                  <div key={group.label} className="space-y-2">
+                    <div className="px-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      {group.label}
+                    </div>
+                    {group.categories.map((cat) => renderBudgetCategory(cat))}
+                  </div>
+                ))}
+
+                {false && dashboardCategories.map((cat) => {
                   const percent =
                     cat.available > 0
                       ? Math.max(0, Math.min(100, (cat.spent / cat.available) * 100))
@@ -1336,6 +1598,23 @@ export default function Finances() {
           </TabsContent>
 
           <TabsContent value="transactions" className="space-y-4">
+            <div className="flex items-center justify-between gap-3 rounded-2xl border bg-card p-4 shadow-sm">
+              <div className="text-sm font-medium text-muted-foreground">Month</div>
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="icon" onClick={() => setViewDate((d) => subMonths(d, 1))}>
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <div className="min-w-28 text-center font-medium">{format(viewDate, "MMM yyyy")}</div>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => setViewDate((d) => addMonths(d, 1))}
+                  disabled={isCurrentMonth}
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
             <div className="rounded-2xl border bg-card p-4 shadow-sm space-y-3">
               <div className="font-medium">All Transactions</div>
 
