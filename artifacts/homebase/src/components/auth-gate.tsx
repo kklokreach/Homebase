@@ -2,7 +2,7 @@ import { FormEvent, ReactNode, useEffect, useState } from "react";
 import { LockKeyhole } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { apiUrl, getSameOriginAppUrl, isUsingCrossOriginApi } from "@/lib/api-base";
+import { apiUrl } from "@/lib/api-base";
 
 type SessionResponse = {
   authRequired: boolean;
@@ -28,13 +28,6 @@ export function AuthGate({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let cancelled = false;
-
-    if (import.meta.env.PROD && isUsingCrossOriginApi()) {
-      window.location.replace(getSameOriginAppUrl());
-      return () => {
-        cancelled = true;
-      };
-    }
 
     requestSession()
       .then((nextSession) => {

@@ -5,15 +5,6 @@ export function getApiOrigin(): string {
   ).origin;
 }
 
-export function isUsingCrossOriginApi(): boolean {
-  return getApiOrigin() !== window.location.origin;
-}
-
-export function getSameOriginAppUrl(): string {
-  const { pathname, search, hash } = window.location;
-  return `${getApiOrigin()}${pathname}${search}${hash}`;
-}
-
 export function apiUrl(path: string): string {
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
   return `${getApiOrigin()}${normalizedPath}`;
