@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { addMonths, format, subMonths } from "date-fns";
 import {
   ArrowDown,
@@ -14,25 +14,42 @@ import {
 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
-  useGetBudgetDashboard,
-  useListBudgetCategories,
-  getListBudgetCategoriesQueryKey,
   getGetBudgetDashboardQueryKey,
   getGetHomeSnapshotQueryKey,
+  getListBudgetCategoriesQueryKey,
   getListTransactionsQueryKey,
+  useGetBudgetDashboard,
+  useListBudgetCategories,
 } from "@workspace/api-client-react";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useToast } from "@/hooks/use-toast";
 import { apiFetch } from "@/lib/api-base";
+
+type BudgetCategory = {
+  id: number;
+  name: string;
+  groupName?: string | null;
+  sortOrder: number;
+};
 
 type DashboardCategory = {
   categoryId: number;
   categoryName: string;
   budgeted: number;
   rollover: number;
+  available: number;
+  spent: number;
+  left: number;
+};
+
+type CategoryGroup = {
+  key: string;
+  label: string;
+  categories: BudgetCategory[];
+  budgeted: number;
   available: number;
   spent: number;
   left: number;
@@ -68,6 +85,18 @@ function money(n: number) {
   });
 }
 
+function groupLabel(groupName?: string | null) {
+  return groupName?.trim() || "Ungrouped";
+}
+
+function groupKey(label: string) {
+  return label.trim().toLocaleLowerCase();
+}
+
+function orderedIdsFromGroups(groups: CategoryGroup[]) {
+  return groups.flatMap((group) => group.categories.map((cat) => cat.id));
+}
+
 export default function Settings() {
   const now = new Date();
   const [viewDate, setViewDate] = useState(new Date(now.getFullYear(), now.getMonth(), 1));
@@ -79,6 +108,7 @@ export default function Settings() {
   const [budgetDrafts, setBudgetDrafts] = useState<Record<number, string>>({});
   const [savingBudgetId, setSavingBudgetId] = useState<number | null>(null);
   const [reorderingCategoryId, setReorderingCategoryId] = useState<number | null>(null);
+  const [reorderingGroupKey, setReorderingGroupKey] = useState<string | null>(null);
 
   const year = viewDate.getFullYear();
   const month = viewDate.getMonth() + 1;
@@ -89,7 +119,7 @@ export default function Settings() {
   const { data: categories, isLoading } = useListBudgetCategories();
   const { data: dashboard, isLoading: dashboardLoading } = useGetBudgetDashboard(
     { year, month },
-    { query: { queryKey: getGetBudgetDashboardQueryKey({ year, month }) } }
+    { query: { queryKey: getGetBudgetDashboardQueryKey({ year, month }) } },
   );
 
   function refresh() {
@@ -116,7 +146,39 @@ export default function Settings() {
     return map;
   }, [dashboard]);
 
-  async function handleAddCategory(e: React.FormEvent) {
+  const categoryGroups = useMemo<CategoryGroup[]>(() => {
+    const groups = new Map<string, CategoryGroup>();
+
+    for (const cat of (categories ?? []) as BudgetCategory[]) {
+      const label = groupLabel(cat.groupName);
+      const key = groupKey(label);
+
+      if (!groups.has(key)) {
+        groups.set(key, {
+          key,
+          label,
+          categories: [],
+          budgeted: 0,
+          available: 0,
+          spent: 0,
+          left: 0,
+        });
+      }
+
+      const group = groups.get(key)!;
+      const row = dashboardMap.get(cat.id);
+
+      group.categories.push(cat);
+      group.budgeted += row?.budgeted ?? 0;
+      group.available += row?.available ?? 0;
+      group.spent += row?.spent ?? 0;
+      group.left += row?.left ?? 0;
+    }
+
+    return Array.from(groups.values());
+  }, [categories, dashboardMap]);
+
+  async function handleAddCategory(e: FormEvent) {
     e.preventDefault();
     if (!newCategoryName.trim()) return;
 
@@ -186,29 +248,70 @@ export default function Settings() {
     }
   }
 
-  async function reorderCategory(categoryId: number, direction: "up" | "down") {
-    const current = categories ?? [];
-    const index = current.findIndex((cat) => cat.id === categoryId);
-    const nextIndex = direction === "up" ? index - 1 : index + 1;
-    if (index < 0 || nextIndex < 0 || nextIndex >= current.length) return;
+  async function saveCategoryOrder(
+    orderedIds: number[],
+    successTitle: string,
+  ) {
+    await api<void>("/budget/categories/reorder", {
+      method: "PUT",
+      body: JSON.stringify({ orderedIds }),
+    });
+    refresh();
+    toast({ title: successTitle });
+  }
 
-    const reordered = [...current];
-    const currentCategory = reordered[index];
-    const nextCategory = reordered[nextIndex];
+  async function reorderGroup(groupKeyValue: string, direction: "up" | "down") {
+    const index = categoryGroups.findIndex((group) => group.key === groupKeyValue);
+    const nextIndex = direction === "up" ? index - 1 : index + 1;
+    if (index < 0 || nextIndex < 0 || nextIndex >= categoryGroups.length) return;
+
+    const reordered = categoryGroups.map((group) => ({
+      ...group,
+      categories: [...group.categories],
+    }));
+    const currentGroup = reordered[index];
+    const nextGroup = reordered[nextIndex];
+    if (!currentGroup || !nextGroup) return;
+    reordered[index] = nextGroup;
+    reordered[nextIndex] = currentGroup;
+
+    try {
+      setReorderingGroupKey(groupKeyValue);
+      await saveCategoryOrder(
+        orderedIdsFromGroups(reordered),
+        "Group order updated",
+      );
+    } catch {
+      toast({ title: "Failed to reorder group", variant: "destructive" });
+    } finally {
+      setReorderingGroupKey(null);
+    }
+  }
+
+  async function reorderCategory(categoryId: number, groupKeyValue: string, direction: "up" | "down") {
+    const reordered = categoryGroups.map((group) => ({
+      ...group,
+      categories: [...group.categories],
+    }));
+    const group = reordered.find((item) => item.key === groupKeyValue);
+    if (!group) return;
+
+    const index = group.categories.findIndex((cat) => cat.id === categoryId);
+    const nextIndex = direction === "up" ? index - 1 : index + 1;
+    if (index < 0 || nextIndex < 0 || nextIndex >= group.categories.length) return;
+
+    const currentCategory = group.categories[index];
+    const nextCategory = group.categories[nextIndex];
     if (!currentCategory || !nextCategory) return;
-    reordered[index] = nextCategory;
-    reordered[nextIndex] = currentCategory;
+    group.categories[index] = nextCategory;
+    group.categories[nextIndex] = currentCategory;
 
     try {
       setReorderingCategoryId(categoryId);
-      await api<void>("/budget/categories/reorder", {
-        method: "PUT",
-        body: JSON.stringify({
-          orderedIds: reordered.map((cat) => cat.id),
-        }),
-      });
-      refresh();
-      toast({ title: "Category order updated" });
+      await saveCategoryOrder(
+        orderedIdsFromGroups(reordered),
+        "Category order updated",
+      );
     } catch {
       toast({ title: "Failed to reorder category", variant: "destructive" });
     } finally {
@@ -239,6 +342,8 @@ export default function Settings() {
     }
   }
 
+  const reorderBusy = reorderingCategoryId !== null || reorderingGroupKey !== null;
+
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-semibold">Settings</h1>
@@ -250,7 +355,7 @@ export default function Settings() {
             Budget Categories
           </CardTitle>
           <CardDescription>
-            Rename categories, delete categories, and edit monthly budget amounts here.
+            Manage category groups, category order, and monthly budget amounts here.
           </CardDescription>
         </CardHeader>
 
@@ -303,138 +408,177 @@ export default function Settings() {
               No categories yet. Add one above.
             </div>
           ) : (
-            <div className="space-y-3">
-              {categories?.map((cat, index) => {
-                const editing = editingId === cat.id;
-                const row = dashboardMap.get(cat.id);
-
-                return (
-                  <div
-                    key={cat.id}
-                    className="rounded-xl border border-border/50 bg-background/50 p-3 space-y-3"
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      {!editing ? (
-                        <>
-                          <div className="min-w-0">
-                            <div className="font-medium">{cat.name}</div>
-                            <div className="text-xs text-muted-foreground">
-                              {cat.groupName?.trim() || "Ungrouped"}
-                            </div>
-                            <div className="text-xs text-muted-foreground">
-                              Available {money(row?.available ?? 0)} · Spent {money(row?.spent ?? 0)} · Left {money(row?.left ?? 0)}
-                            </div>
-                          </div>
-                          <div className="flex gap-2">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => reorderCategory(cat.id, "up")}
-                              disabled={index === 0 || reorderingCategoryId === cat.id}
-                              aria-label={`Move ${cat.name} up`}
-                            >
-                              <ArrowUp className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => reorderCategory(cat.id, "down")}
-                              disabled={index === (categories?.length ?? 0) - 1 || reorderingCategoryId === cat.id}
-                              aria-label={`Move ${cat.name} down`}
-                            >
-                              <ArrowDown className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="icon"
-                              onClick={() => {
-                                setEditingId(cat.id);
-                                setDraftName(cat.name);
-                                setDraftGroup(cat.groupName ?? "");
-                              }}
-                            >
-                              <Pencil className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => handleDeleteCategory(cat.id)}
-                            >
-                              <Trash2 className="h-4 w-4 text-destructive" />
-                            </Button>
-                          </div>
-                        </>
-                      ) : (
-                        <>
-                          <div className="grid flex-1 gap-2 md:grid-cols-2">
-                            <Input
-                              value={draftName}
-                              onChange={(e) => setDraftName(e.target.value)}
-                            />
-                            <Input
-                              value={draftGroup}
-                              onChange={(e) => setDraftGroup(e.target.value)}
-                              placeholder="Group"
-                            />
-                          </div>
-                          <div className="flex gap-2">
-                            <Button
-                              onClick={() => handleSaveCategory(cat.id)}
-                              disabled={savingBudgetId === cat.id || !draftName.trim()}
-                            >
-                              <Save className="h-4 w-4" />
-                              {savingBudgetId === cat.id ? "Saving..." : "Save"}
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="icon"
-                              onClick={() => {
-                                setEditingId(null);
-                                setDraftName("");
-                                setDraftGroup("");
-                              }}
-                            >
-                              <X className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </>
-                      )}
-                    </div>
-
-                    <div
-                      className={
-                        editing
-                          ? "grid gap-2 md:grid-cols-[120px_1fr] md:items-center"
-                          : "grid gap-2 md:grid-cols-[120px_1fr_auto] md:items-center"
-                      }
-                    >
-                      <div className="text-sm text-muted-foreground">
-                        Budget for {format(viewDate, "MMM")}
+            <div className="space-y-4">
+              {categoryGroups.map((group, groupIndex) => (
+                <section
+                  key={group.key}
+                  className="overflow-hidden rounded-xl border border-border/50 bg-background/40"
+                >
+                  <div className="flex items-start justify-between gap-3 border-b border-border/50 p-3">
+                    <div className="min-w-0">
+                      <div className="font-medium">{group.label}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {group.categories.length} categor{group.categories.length === 1 ? "y" : "ies"} / Budgeted{" "}
+                        {money(group.budgeted)} / Available {money(group.available)} / Left {money(group.left)}
                       </div>
-                      <Input
-                        inputMode="decimal"
-                        value={budgetDrafts[cat.id] ?? ""}
-                        onChange={(e) =>
-                          setBudgetDrafts((prev) => ({
-                            ...prev,
-                            [cat.id]: e.target.value.replace(/[^0-9.]/g, ""),
-                          }))
-                        }
-                        placeholder="0"
-                      />
-                      {!editing && (
-                        <Button
-                          onClick={() => handleSaveBudget(cat.id)}
-                          disabled={savingBudgetId === cat.id}
-                        >
-                          <Save className="mr-2 h-4 w-4" />
-                          {savingBudgetId === cat.id ? "Saving..." : "Save"}
-                        </Button>
-                      )}
+                    </div>
+                    <div className="flex shrink-0 gap-2">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => reorderGroup(group.key, "up")}
+                        disabled={groupIndex === 0 || reorderBusy}
+                        aria-label={`Move ${group.label} group up`}
+                      >
+                        <ArrowUp className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => reorderGroup(group.key, "down")}
+                        disabled={groupIndex === categoryGroups.length - 1 || reorderBusy}
+                        aria-label={`Move ${group.label} group down`}
+                      >
+                        <ArrowDown className="h-4 w-4" />
+                      </Button>
                     </div>
                   </div>
-                );
-              })}
+
+                  <div className="space-y-3 p-3">
+                    {group.categories.map((cat, categoryIndex) => {
+                      const editing = editingId === cat.id;
+                      const row = dashboardMap.get(cat.id);
+
+                      return (
+                        <div
+                          key={cat.id}
+                          className="space-y-3 rounded-lg border border-border/50 bg-card/50 p-3"
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            {!editing ? (
+                              <>
+                                <div className="min-w-0">
+                                  <div className="font-medium">{cat.name}</div>
+                                  <div className="text-xs text-muted-foreground">
+                                    Available {money(row?.available ?? 0)} / Spent {money(row?.spent ?? 0)} / Left{" "}
+                                    {money(row?.left ?? 0)}
+                                  </div>
+                                </div>
+                                <div className="flex shrink-0 gap-2">
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => reorderCategory(cat.id, group.key, "up")}
+                                    disabled={categoryIndex === 0 || reorderBusy}
+                                    aria-label={`Move ${cat.name} up within ${group.label}`}
+                                  >
+                                    <ArrowUp className="h-4 w-4" />
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => reorderCategory(cat.id, group.key, "down")}
+                                    disabled={categoryIndex === group.categories.length - 1 || reorderBusy}
+                                    aria-label={`Move ${cat.name} down within ${group.label}`}
+                                  >
+                                    <ArrowDown className="h-4 w-4" />
+                                  </Button>
+                                  <Button
+                                    variant="outline"
+                                    size="icon"
+                                    onClick={() => {
+                                      setEditingId(cat.id);
+                                      setDraftName(cat.name);
+                                      setDraftGroup(cat.groupName ?? "");
+                                    }}
+                                  >
+                                    <Pencil className="h-4 w-4" />
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => handleDeleteCategory(cat.id)}
+                                  >
+                                    <Trash2 className="h-4 w-4 text-destructive" />
+                                  </Button>
+                                </div>
+                              </>
+                            ) : (
+                              <>
+                                <div className="grid flex-1 gap-2 md:grid-cols-2">
+                                  <Input
+                                    value={draftName}
+                                    onChange={(e) => setDraftName(e.target.value)}
+                                    placeholder="Category name"
+                                  />
+                                  <Input
+                                    value={draftGroup}
+                                    onChange={(e) => setDraftGroup(e.target.value)}
+                                    placeholder="Group"
+                                  />
+                                </div>
+                                <div className="flex shrink-0 gap-2">
+                                  <Button
+                                    className="gap-2"
+                                    onClick={() => handleSaveCategory(cat.id)}
+                                    disabled={savingBudgetId === cat.id || !draftName.trim()}
+                                  >
+                                    <Save className="h-4 w-4" />
+                                    {savingBudgetId === cat.id ? "Saving..." : "Save"}
+                                  </Button>
+                                  <Button
+                                    variant="outline"
+                                    size="icon"
+                                    onClick={() => {
+                                      setEditingId(null);
+                                      setDraftName("");
+                                      setDraftGroup("");
+                                    }}
+                                  >
+                                    <X className="h-4 w-4" />
+                                  </Button>
+                                </div>
+                              </>
+                            )}
+                          </div>
+
+                          <div
+                            className={
+                              editing
+                                ? "grid gap-2 md:grid-cols-[120px_1fr] md:items-center"
+                                : "grid gap-2 md:grid-cols-[120px_1fr_auto] md:items-center"
+                            }
+                          >
+                            <div className="text-sm text-muted-foreground">
+                              Budget for {format(viewDate, "MMM")}
+                            </div>
+                            <Input
+                              inputMode="decimal"
+                              value={budgetDrafts[cat.id] ?? ""}
+                              onChange={(e) =>
+                                setBudgetDrafts((prev) => ({
+                                  ...prev,
+                                  [cat.id]: e.target.value.replace(/[^0-9.]/g, ""),
+                                }))
+                              }
+                              placeholder="0.00"
+                            />
+                            {!editing && (
+                              <Button
+                                onClick={() => handleSaveBudget(cat.id)}
+                                disabled={savingBudgetId === cat.id}
+                              >
+                                <Save className="mr-2 h-4 w-4" />
+                                {savingBudgetId === cat.id ? "Saving..." : "Save"}
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </section>
+              ))}
             </div>
           )}
         </CardContent>

@@ -87,6 +87,13 @@ router.post("/budget/categories", async (req, res): Promise<void> => {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
+
+  const [nextOrder] = await db
+    .select({
+      value: sql<number>`coalesce(max(${budgetCategoriesTable.sortOrder}), -1) + 1`,
+    })
+    .from(budgetCategoriesTable);
+
   const [cat] = await db
     .insert(budgetCategoriesTable)
     .values({
@@ -94,7 +101,7 @@ router.post("/budget/categories", async (req, res): Promise<void> => {
       icon: parsed.data.icon ?? null,
       color: parsed.data.color ?? null,
       groupName: parsed.data.groupName?.trim() || null,
-      sortOrder: parsed.data.sortOrder ?? 0,
+      sortOrder: parsed.data.sortOrder ?? Number(nextOrder?.value ?? 0),
     })
     .returning();
   res.status(201).json(cat);
@@ -498,7 +505,7 @@ router.get("/budget/dashboard", async (req, res): Promise<void> => {
   const categories = await db
     .select()
     .from(budgetCategoriesTable)
-    .orderBy(budgetCategoriesTable.sortOrder);
+    .orderBy(budgetCategoriesTable.sortOrder, budgetCategoriesTable.name);
 
   const monthlyBudgets = await db
     .select()
