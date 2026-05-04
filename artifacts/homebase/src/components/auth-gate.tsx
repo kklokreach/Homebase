@@ -66,8 +66,17 @@ export function AuthGate({ children }: { children: ReactNode }) {
         return;
       }
 
+      const nextSession = await requestSession();
+      if (nextSession.authRequired && !nextSession.authenticated) {
+        setSession(nextSession);
+        setError(
+          "Sign-in succeeded, but the browser did not return the session cookie. Use the same Render origin for the app and API, or check the API cookie and CORS settings.",
+        );
+        return;
+      }
+
       setAccessCode("");
-      setSession({ authRequired: true, authenticated: true });
+      setSession(nextSession);
     } catch {
       setError("Homebase API is not reachable.");
     } finally {

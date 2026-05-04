@@ -4,6 +4,27 @@ import { logger } from "../lib/logger";
 
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 
+function contentSecurityPolicy(req: Parameters<RequestHandler>[0]): string {
+  if (req.path.startsWith("/api")) {
+    return "default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'";
+  }
+
+  const allowedConnectOrigins = Array.from(config.allowedOrigins);
+
+  return [
+    "default-src 'self'",
+    "base-uri 'self'",
+    "frame-ancestors 'none'",
+    "form-action 'self'",
+    "object-src 'none'",
+    "script-src 'self'",
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data:",
+    "font-src 'self' data:",
+    `connect-src 'self' ${allowedConnectOrigins.join(" ")}`.trim(),
+  ].join("; ");
+}
+
 function getHostOrigin(req: Parameters<RequestHandler>[0]): string | undefined {
   const host = req.get("host");
   if (!host) return undefined;
@@ -24,16 +45,13 @@ function getRequestOrigin(req: Parameters<RequestHandler>[0]): string | undefine
   }
 }
 
-export const securityHeaders: RequestHandler = (_req, res, next) => {
+export const securityHeaders: RequestHandler = (req, res, next) => {
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("X-Frame-Options", "DENY");
   res.setHeader("Referrer-Policy", "no-referrer");
   res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
   res.setHeader("Cross-Origin-Resource-Policy", "same-site");
-  res.setHeader(
-    "Content-Security-Policy",
-    "default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'",
-  );
+  res.setHeader("Content-Security-Policy", contentSecurityPolicy(req));
 
   if (config.isProduction) {
     res.setHeader("Strict-Transport-Security", "max-age=15552000; includeSubDomains");
