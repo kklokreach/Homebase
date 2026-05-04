@@ -152,21 +152,37 @@ export default function Settings() {
   async function handleSaveCategory(id: number) {
     if (!draftName.trim()) return;
 
+    const budgetAmount = parseFloat(budgetDrafts[id] || "0") || 0;
+
     try {
-      await api(`/budget/categories/${id}`, {
-        method: "PUT",
-        body: JSON.stringify({
-          name: draftName.trim(),
-          groupName: draftGroup.trim() || null,
+      setSavingBudgetId(id);
+      await Promise.all([
+        api(`/budget/categories/${id}`, {
+          method: "PUT",
+          body: JSON.stringify({
+            name: draftName.trim(),
+            groupName: draftGroup.trim() || null,
+          }),
         }),
-      });
+        api("/budget/monthly", {
+          method: "POST",
+          body: JSON.stringify({
+            categoryId: id,
+            year,
+            month,
+            budgetAmount,
+          }),
+        }),
+      ]);
       setEditingId(null);
       setDraftName("");
       setDraftGroup("");
       refresh();
-      toast({ title: "Category updated" });
+      toast({ title: "Category saved" });
     } catch {
-      toast({ title: "Failed to update category", variant: "destructive" });
+      toast({ title: "Failed to save category", variant: "destructive" });
+    } finally {
+      setSavingBudgetId(null);
     }
   }
 
@@ -362,8 +378,12 @@ export default function Settings() {
                             />
                           </div>
                           <div className="flex gap-2">
-                            <Button size="icon" onClick={() => handleSaveCategory(cat.id)}>
+                            <Button
+                              onClick={() => handleSaveCategory(cat.id)}
+                              disabled={savingBudgetId === cat.id || !draftName.trim()}
+                            >
                               <Save className="h-4 w-4" />
+                              {savingBudgetId === cat.id ? "Saving..." : "Save"}
                             </Button>
                             <Button
                               variant="outline"
@@ -381,7 +401,13 @@ export default function Settings() {
                       )}
                     </div>
 
-                    <div className="grid gap-2 md:grid-cols-[120px_1fr_auto] md:items-center">
+                    <div
+                      className={
+                        editing
+                          ? "grid gap-2 md:grid-cols-[120px_1fr] md:items-center"
+                          : "grid gap-2 md:grid-cols-[120px_1fr_auto] md:items-center"
+                      }
+                    >
                       <div className="text-sm text-muted-foreground">
                         Budget for {format(viewDate, "MMM")}
                       </div>
@@ -396,13 +422,15 @@ export default function Settings() {
                         }
                         placeholder="0"
                       />
-                      <Button
-                        onClick={() => handleSaveBudget(cat.id)}
-                        disabled={savingBudgetId === cat.id}
-                      >
-                        <Save className="mr-2 h-4 w-4" />
-                        {savingBudgetId === cat.id ? "Saving..." : "Save"}
-                      </Button>
+                      {!editing && (
+                        <Button
+                          onClick={() => handleSaveBudget(cat.id)}
+                          disabled={savingBudgetId === cat.id}
+                        >
+                          <Save className="mr-2 h-4 w-4" />
+                          {savingBudgetId === cat.id ? "Saving..." : "Save"}
+                        </Button>
+                      )}
                     </div>
                   </div>
                 );
