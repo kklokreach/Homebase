@@ -6,13 +6,14 @@
 - Set `HOMEBASE_SESSION_SECRET` to at least 32 random characters.
 - Set `HOMEBASE_REQUIRE_AUTH=true`.
 - Set `CORS_ORIGINS` to the exact frontend origin(s), comma-separated.
+- Keep `HOMEBASE_COOKIE_SAME_SITE=none` when the frontend and API are served from different origins.
 - Keep `DATABASE_URL` and calendar feed URLs out of git.
 - Set `TRUST_PROXY=true` only when the app is behind a trusted proxy.
 - Keep the `Security` GitHub Actions workflow required on pull requests.
 
 ## Current Protections
 
-- HttpOnly, SameSite session cookie authentication.
+- HttpOnly, secure session cookie authentication. Production cookies default to `SameSite=None` so split frontend/API deployments can send them with credentialed requests.
 - Production startup fails if auth secrets are missing or weak.
 - Restricted CORS with credential support.
 - Origin checks for state-changing requests.

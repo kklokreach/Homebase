@@ -28,8 +28,8 @@ function timingSafeStringEqual(a: string, b: string): boolean {
 function cookieOptions(): CookieOptions {
   return {
     httpOnly: true,
-    secure: config.isProduction,
-    sameSite: "lax",
+    secure: config.isProduction || config.auth.cookieSameSite === "none",
+    sameSite: config.auth.cookieSameSite,
     path: "/",
     maxAge: config.auth.sessionMaxAgeMs,
   };

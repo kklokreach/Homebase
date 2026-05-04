@@ -1,4 +1,5 @@
 const isProduction = process.env.NODE_ENV === "production";
+type CookieSameSite = "lax" | "strict" | "none";
 
 function parseBoolean(value: string | undefined, fallback: boolean): boolean {
   if (value === undefined) return fallback;
@@ -9,6 +10,13 @@ function parsePositiveInt(value: string | undefined, fallback: number): number {
   if (value === undefined) return fallback;
   const parsed = Number(value);
   return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function parseCookieSameSite(value: string | undefined, fallback: CookieSameSite): CookieSameSite {
+  if (value === undefined) return fallback;
+  const normalized = value.toLowerCase();
+  if (normalized === "lax" || normalized === "strict" || normalized === "none") return normalized;
+  return fallback;
 }
 
 function parseCsv(value: string | undefined): string[] {
@@ -47,6 +55,10 @@ const accessCode = process.env.HOMEBASE_ACCESS_CODE ?? "";
 const sessionSecret = process.env.HOMEBASE_SESSION_SECRET ?? "";
 const explicitAuthRequired = parseBoolean(process.env.HOMEBASE_REQUIRE_AUTH, false);
 const authEnabled = Boolean(accessCode) || isProduction || explicitAuthRequired;
+const cookieSameSite = parseCookieSameSite(
+  process.env.HOMEBASE_COOKIE_SAME_SITE,
+  isProduction ? "none" : "lax",
+);
 
 if (authEnabled && accessCode.length < 8) {
   throw new Error("HOMEBASE_ACCESS_CODE must be at least 8 characters when auth is enabled.");
@@ -66,6 +78,7 @@ export const config = {
     accessCode,
     sessionSecret,
     cookieName: isProduction ? "__Host-homebase_session" : "homebase_session",
+    cookieSameSite,
     sessionMaxAgeMs: parsePositiveInt(process.env.SESSION_MAX_AGE_MS, 1000 * 60 * 60 * 24 * 7),
   },
   rateLimits: {

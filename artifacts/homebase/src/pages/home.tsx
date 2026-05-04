@@ -10,6 +10,19 @@ function fmt(n: number) {
   return n.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
 }
 
+function homeLoadErrorMessage(error: unknown) {
+  if (
+    error &&
+    typeof error === "object" &&
+    "status" in error &&
+    (error as { status?: unknown }).status === 401
+  ) {
+    return "Your session expired. Sign in again to continue.";
+  }
+
+  return "Could not load Homebase. Check that the API is reachable and that you are signed in.";
+}
+
 export default function Home() {
   const { data: snapshot, isLoading, error } = useGetHomeSnapshot({
     query: { queryKey: getGetHomeSnapshotQueryKey() },
@@ -30,7 +43,7 @@ export default function Home() {
     );
   }
 
-  if (error) return <div className="px-4 pt-5 max-w-2xl mx-auto text-sm text-destructive">Could not load Homebase. Check that the API is up and DATABASE_URL is set on Render.</div>;
+  if (error) return <div className="px-4 pt-5 max-w-2xl mx-auto text-sm text-destructive">{homeLoadErrorMessage(error)}</div>;
 if (!snapshot) return <div className="px-4 pt-5 max-w-2xl mx-auto text-sm text-muted-foreground">No home data returned yet.</div>;
 
   const { todayTasks, budgetSnapshot, recentTransactions } = snapshot;
