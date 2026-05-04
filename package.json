@@ -8,7 +8,7 @@
     "prebuild": "pnpm run typecheck",
     "build": "pnpm -r --workspace-concurrency=1 --if-present run build",
     "typecheck:libs": "node ./node_modules/typescript/bin/tsc --build",
-    "typecheck": "pnpm -r --workspace-concurrency=1 --filter \"./lib/**\" --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck"
+    "typecheck": "pnpm run typecheck:libs && pnpm -r --workspace-concurrency=1 --filter \"./lib/**\" --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck"
   },
   "private": true,
   "devDependencies": {
