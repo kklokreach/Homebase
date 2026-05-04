@@ -30,6 +30,8 @@ function cookieOptions(): CookieOptions {
     httpOnly: true,
     secure: config.isProduction || config.auth.cookieSameSite === "none",
     sameSite: config.auth.cookieSameSite,
+    partitioned: config.auth.cookiePartitioned,
+    priority: "high",
     path: "/",
     maxAge: config.auth.sessionMaxAgeMs,
   };

@@ -7,6 +7,7 @@
 - Set `HOMEBASE_REQUIRE_AUTH=true`.
 - Set `CORS_ORIGINS` to the exact frontend origin(s), comma-separated.
 - Keep `HOMEBASE_COOKIE_SAME_SITE=none` when the frontend and API are served from different origins.
+- Keep `HOMEBASE_COOKIE_PARTITIONED=true` for split frontend/API deployments that must tolerate stricter third-party cookie handling.
 - Prefer serving the built frontend from the API web service for same-origin cookie auth.
 - Keep `DATABASE_URL` and calendar feed URLs out of git.
 - Set `TRUST_PROXY=true` only when the app is behind a trusted proxy.
@@ -14,7 +15,7 @@
 
 ## Current Protections
 
-- HttpOnly, secure session cookie authentication. Production cookies default to `SameSite=None` so split frontend/API deployments can send them with credentialed requests.
+- HttpOnly, secure session cookie authentication. Production cookies default to `SameSite=None` and partitioned storage so split frontend/API deployments can send them with credentialed requests in modern browsers.
 - Production startup fails if auth secrets are missing or weak.
 - Restricted CORS with credential support.
 - Origin checks for state-changing requests.

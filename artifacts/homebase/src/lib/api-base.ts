@@ -1,7 +1,17 @@
 export function getApiOrigin(): string {
-  return (import.meta.env.VITE_API_BASE_URL ?? window.location.origin)
-    .replace(/\/api\/?$/, "")
-    .replace(/\/$/, "");
+  return new URL(
+    import.meta.env.VITE_API_BASE_URL ?? window.location.origin,
+    window.location.origin,
+  ).origin;
+}
+
+export function isUsingCrossOriginApi(): boolean {
+  return getApiOrigin() !== window.location.origin;
+}
+
+export function getSameOriginAppUrl(): string {
+  const { pathname, search, hash } = window.location;
+  return `${getApiOrigin()}${pathname}${search}${hash}`;
 }
 
 export function apiUrl(path: string): string {

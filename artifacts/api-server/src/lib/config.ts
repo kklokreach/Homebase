@@ -59,6 +59,10 @@ const cookieSameSite = parseCookieSameSite(
   process.env.HOMEBASE_COOKIE_SAME_SITE,
   isProduction ? "none" : "lax",
 );
+const cookiePartitioned = parseBoolean(
+  process.env.HOMEBASE_COOKIE_PARTITIONED,
+  isProduction && cookieSameSite === "none",
+);
 
 if (authEnabled && accessCode.length < 8) {
   throw new Error("HOMEBASE_ACCESS_CODE must be at least 8 characters when auth is enabled.");
@@ -79,6 +83,7 @@ export const config = {
     sessionSecret,
     cookieName: isProduction ? "__Host-homebase_session" : "homebase_session",
     cookieSameSite,
+    cookiePartitioned,
     sessionMaxAgeMs: parsePositiveInt(process.env.SESSION_MAX_AGE_MS, 1000 * 60 * 60 * 24 * 7),
   },
   rateLimits: {
