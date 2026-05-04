@@ -10,13 +10,15 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { TaskQuickAdd } from "@/components/task-quick-add";
 import { TaskItem } from "@/components/task-item";
 import { Skeleton } from "@/components/ui/skeleton";
-import { CheckSquare } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { ArrowUpDown, CheckSquare } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiFetch } from "@/lib/api-base";
 
 export default function Tasks() {
   const [view, setView] = useState<"today" | "upcoming" | "mine" | "wife" | "shared">("today");
   const [reorderingTaskId, setReorderingTaskId] = useState<number | null>(null);
+  const [reorderMode, setReorderMode] = useState(false);
   const queryClient = useQueryClient();
   const { toast } = useToast();
   
@@ -76,7 +78,14 @@ export default function Tasks() {
         <TaskQuickAdd />
       </header>
 
-      <Tabs value={view} onValueChange={(v) => setView(v as any)} className="w-full">
+      <Tabs
+        value={view}
+        onValueChange={(v) => {
+          setView(v as any);
+          setReorderMode(false);
+        }}
+        className="w-full"
+      >
         <TabsList className="w-full justify-start h-12 p-1 bg-muted/30 rounded-xl overflow-x-auto flex-nowrap shrink-0 border border-border/50">
           <TabsTrigger value="today" className="rounded-lg data-[state=active]:bg-card data-[state=active]:shadow-sm">Today</TabsTrigger>
           <TabsTrigger value="upcoming" className="rounded-lg data-[state=active]:bg-card data-[state=active]:shadow-sm">Upcoming</TabsTrigger>
@@ -102,16 +111,29 @@ export default function Tasks() {
             </div>
           ) : (
             <div className="space-y-3">
+              {(tasks?.length ?? 0) > 1 && (
+                <div className="flex justify-end">
+                  <Button
+                    type="button"
+                    variant={reorderMode ? "secondary" : "outline"}
+                    size="sm"
+                    onClick={() => setReorderMode((current) => !current)}
+                  >
+                    <ArrowUpDown className="h-4 w-4" />
+                    {reorderMode ? "Done" : "Reorder"}
+                  </Button>
+                </div>
+              )}
               {tasks?.map((task, i) => (
                 <TaskItem
                   key={task.id}
                   task={task}
                   index={i}
-                  canMoveUp={i > 0}
-                  canMoveDown={i < tasks.length - 1}
+                  canMoveUp={reorderMode && i > 0}
+                  canMoveDown={reorderMode && i < tasks.length - 1}
                   isReordering={reorderingTaskId === task.id}
-                  onMoveUp={() => moveTask(task.id, "up")}
-                  onMoveDown={() => moveTask(task.id, "down")}
+                  onMoveUp={reorderMode ? () => moveTask(task.id, "up") : undefined}
+                  onMoveDown={reorderMode ? () => moveTask(task.id, "down") : undefined}
                 />
               ))}
             </div>

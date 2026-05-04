@@ -1,13 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { format, addMonths, subMonths } from "date-fns";
-import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight, Pencil, Save, Trash2, X, Wallet } from "lucide-react";
+import { ChevronLeft, ChevronRight, Pencil, Save, Trash2, X, Wallet } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useGetBudgetDashboard,
   useListBudgetCategories,
   getGetBudgetDashboardQueryKey,
   getGetHomeSnapshotQueryKey,
-  getListBudgetCategoriesQueryKey,
   getListTransactionsQueryKey,
 } from "@workspace/api-client-react";
 import {
@@ -409,7 +408,6 @@ export default function Finances() {
   );
   const [incomeDraft, setIncomeDraft] = useState("");
   const [savingIncome, setSavingIncome] = useState(false);
-  const [reorderingCategoryId, setReorderingCategoryId] = useState<number | null>(null);
 
   const year = viewDate.getFullYear();
   const month = viewDate.getMonth() + 1;
@@ -426,6 +424,9 @@ export default function Finances() {
   const { data: categories = [] } = useListBudgetCategories();
   const dashboardView = dashboard as (typeof dashboard & DashboardWithIncome) | undefined;
   const dashboardCategories = (dashboardView?.categories ?? []) as DashboardCategory[];
+  const budgetOverUnder =
+    dashboardView?.budgetOverUnder ??
+    ((dashboardView?.incomeAmount ?? 0) - (dashboard?.totalBudgeted ?? 0));
 
   async function refreshTransactions() {
     try {
@@ -461,7 +462,6 @@ export default function Finances() {
     queryClient.invalidateQueries({
       queryKey: getGetBudgetDashboardQueryKey({ year, month }),
     });
-    queryClient.invalidateQueries({ queryKey: getListBudgetCategoriesQueryKey() });
     queryClient.invalidateQueries({ queryKey: getListTransactionsQueryKey() });
     queryClient.invalidateQueries({ queryKey: getGetHomeSnapshotQueryKey() });
     refreshTransactions();
@@ -496,34 +496,6 @@ export default function Finances() {
       toast({ title: "Failed to update income", variant: "destructive" });
     } finally {
       setSavingIncome(false);
-    }
-  }
-
-  async function reorderCategory(categoryId: number, direction: "up" | "down") {
-    const index = dashboardCategories.findIndex((cat) => cat.categoryId === categoryId);
-    const nextIndex = direction === "up" ? index - 1 : index + 1;
-    if (index < 0 || nextIndex < 0 || nextIndex >= dashboardCategories.length) return;
-
-    const reordered = [...dashboardCategories];
-    const currentCategory = reordered[index];
-    const nextCategory = reordered[nextIndex];
-    if (!currentCategory || !nextCategory) return;
-    reordered[index] = nextCategory;
-    reordered[nextIndex] = currentCategory;
-
-    try {
-      setReorderingCategoryId(categoryId);
-      await api<void>("/budget/categories/reorder", {
-        method: "PUT",
-        body: JSON.stringify({
-          orderedIds: reordered.map((cat) => cat.categoryId),
-        }),
-      });
-      refreshAll();
-    } catch {
-      toast({ title: "Failed to reorder category", variant: "destructive" });
-    } finally {
-      setReorderingCategoryId(null);
     }
   }
 
@@ -807,101 +779,73 @@ export default function Finances() {
         : 0;
     const groupKey = `category-${cat.categoryId}`;
     const group = groupedTransactions.get(groupKey);
-    const index = dashboardCategories.findIndex((item) => item.categoryId === cat.categoryId);
 
     return (
       <AccordionItem key={cat.categoryId} value={groupKey} className="overflow-hidden rounded-xl border">
-        <div className="flex items-stretch">
-          <div className="flex shrink-0 flex-col justify-center gap-1 border-r bg-muted/20 px-1.5">
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8 text-muted-foreground hover:text-foreground"
-              onClick={() => reorderCategory(cat.categoryId, "up")}
-              disabled={index <= 0 || reorderingCategoryId === cat.categoryId}
-              aria-label={`Move ${cat.categoryName} up`}
-            >
-              <ArrowUp className="h-4 w-4" />
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8 text-muted-foreground hover:text-foreground"
-              onClick={() => reorderCategory(cat.categoryId, "down")}
-              disabled={index < 0 || index >= dashboardCategories.length - 1 || reorderingCategoryId === cat.categoryId}
-              aria-label={`Move ${cat.categoryName} down`}
-            >
-              <ArrowDown className="h-4 w-4" />
-            </Button>
-          </div>
-
-          <AccordionTrigger className="flex-1 px-3 py-3 hover:no-underline">
-            <div className="flex min-w-0 flex-1 flex-col gap-3 pr-3 text-left">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="font-medium">{cat.categoryName}</div>
-                  <div className="text-xs text-muted-foreground">
-                    Budgeted {fmt(cat.budgeted)} / Rollover {fmt(cat.rollover, true)}
-                  </div>
+        <AccordionTrigger className="px-3 py-3 hover:no-underline">
+          <div className="flex min-w-0 flex-1 flex-col gap-3 pr-3 text-left">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="font-medium">{cat.categoryName}</div>
+                <div className="text-xs text-muted-foreground">
+                  Budgeted {fmt(cat.budgeted)} / Rollover {fmt(cat.rollover, true)}
                 </div>
+              </div>
 
+              <div
+                className={cn(
+                  "text-sm font-medium whitespace-nowrap",
+                  cat.left < 0
+                    ? "text-destructive"
+                    : cat.left === 0
+                    ? "text-muted-foreground"
+                    : "text-primary"
+                )}
+              >
+                Left {fmt(cat.left)}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-2 text-sm">
+              <div className="rounded-lg bg-muted/40 px-3 py-2">
+                <div className="text-xs text-muted-foreground">Available</div>
+                <div className="font-medium">{fmt(cat.available)}</div>
+              </div>
+              <div className="rounded-lg bg-muted/40 px-3 py-2">
+                <div className="text-xs text-muted-foreground">Spent</div>
+                <div className="font-medium">{fmt(cat.spent)}</div>
+              </div>
+              <div className="rounded-lg bg-muted/40 px-3 py-2">
+                <div className="text-xs text-muted-foreground">Remaining</div>
                 <div
                   className={cn(
-                    "text-sm font-medium whitespace-nowrap",
-                    cat.left < 0
-                      ? "text-destructive"
-                      : cat.left === 0
-                      ? "text-muted-foreground"
-                      : "text-primary"
+                    "font-medium",
+                    cat.left < 0 ? "text-destructive" : "text-primary"
                   )}
                 >
-                  Left {fmt(cat.left)}
-                </div>
-              </div>
-
-              <div className="grid grid-cols-3 gap-2 text-sm">
-                <div className="rounded-lg bg-muted/40 px-3 py-2">
-                  <div className="text-xs text-muted-foreground">Available</div>
-                  <div className="font-medium">{fmt(cat.available)}</div>
-                </div>
-                <div className="rounded-lg bg-muted/40 px-3 py-2">
-                  <div className="text-xs text-muted-foreground">Spent</div>
-                  <div className="font-medium">{fmt(cat.spent)}</div>
-                </div>
-                <div className="rounded-lg bg-muted/40 px-3 py-2">
-                  <div className="text-xs text-muted-foreground">Remaining</div>
-                  <div
-                    className={cn(
-                      "font-medium",
-                      cat.left < 0 ? "text-destructive" : "text-primary"
-                    )}
-                  >
-                    {fmt(cat.left)}
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between gap-3">
-                <div className="h-2 flex-1 rounded-full bg-muted overflow-hidden">
-                  <div
-                    className={cn(
-                      "h-full",
-                      cat.left < 0 ? "bg-destructive" : "bg-primary"
-                    )}
-                    style={{ width: `${percent}%` }}
-                  />
-                </div>
-                <div className="shrink-0 text-xs text-muted-foreground">
-                  {txLoading
-                    ? "Loading transactions..."
-                    : `${group?.count ?? 0} transaction${group?.count === 1 ? "" : "s"}`}
+                  {fmt(cat.left)}
                 </div>
               </div>
             </div>
-          </AccordionTrigger>
-        </div>
+
+            <div className="flex items-center justify-between gap-3">
+              <div className="h-2 flex-1 rounded-full bg-muted overflow-hidden">
+                <div
+                  className={cn(
+                    "h-full",
+                    cat.left < 0 ? "bg-destructive" : "bg-primary"
+                  )}
+                  style={{ width: `${percent}%` }}
+                />
+              </div>
+              <div className="shrink-0 text-xs text-muted-foreground">
+                {txLoading
+                  ? "Loading transactions..."
+                  : `${group?.count ?? 0} transaction${group?.count === 1 ? "" : "s"}`}
+              </div>
+            </div>
+          </div>
+        </AccordionTrigger>
 
         <AccordionContent className="border-t px-3 pt-3">
           {txLoading ? (
@@ -1228,14 +1172,14 @@ export default function Finances() {
                 },
                 {
                   label:
-                    dashboard.totalLeft === 0
+                    budgetOverUnder === 0
                       ? "On budget"
-                      : dashboard.totalLeft < 0
+                      : budgetOverUnder < 0
                       ? "Over budget"
                       : "Under budget",
-                  value: fmt(Math.abs(dashboard.totalLeft)),
+                  value: fmt(Math.abs(budgetOverUnder)),
                   color:
-                    dashboard.totalLeft < 0 ? "text-destructive" : "text-secondary",
+                    budgetOverUnder < 0 ? "text-destructive" : "text-secondary",
                 },
               ].map(({ label, value, color }) => (
                 <div key={label} className="rounded-2xl border bg-card p-4 shadow-sm">
@@ -1265,101 +1209,6 @@ export default function Finances() {
                     {group.categories.map((cat) => renderBudgetCategory(cat))}
                   </div>
                 ))}
-
-                {false && dashboardCategories.map((cat) => {
-                  const percent =
-                    cat.available > 0
-                      ? Math.max(0, Math.min(100, (cat.spent / cat.available) * 100))
-                      : 0;
-                  const groupKey = `category-${cat.categoryId}`;
-                  const group = groupedTransactions.get(groupKey);
-
-                  return (
-                    <AccordionItem key={cat.categoryId} value={groupKey} className="overflow-hidden rounded-xl border">
-                      <AccordionTrigger className="px-3 py-3 hover:no-underline">
-                        <div className="flex min-w-0 flex-1 flex-col gap-3 pr-3 text-left">
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="min-w-0">
-                              <div className="font-medium">{cat.categoryName}</div>
-                              <div className="text-xs text-muted-foreground">
-                                Budgeted {fmt(cat.budgeted)} · Rollover {fmt(cat.rollover, true)}
-                              </div>
-                            </div>
-
-                            <div
-                              className={cn(
-                                "text-sm font-medium whitespace-nowrap",
-                                cat.left < 0
-                                  ? "text-destructive"
-                                  : cat.left === 0
-                                  ? "text-muted-foreground"
-                                  : "text-primary"
-                              )}
-                            >
-                              Left {fmt(cat.left)}
-                            </div>
-                          </div>
-
-                          <div className="grid grid-cols-3 gap-2 text-sm">
-                            <div className="rounded-lg bg-muted/40 px-3 py-2">
-                              <div className="text-xs text-muted-foreground">Available</div>
-                              <div className="font-medium">{fmt(cat.available)}</div>
-                            </div>
-                            <div className="rounded-lg bg-muted/40 px-3 py-2">
-                              <div className="text-xs text-muted-foreground">Spent</div>
-                              <div className="font-medium">{fmt(cat.spent)}</div>
-                            </div>
-                            <div className="rounded-lg bg-muted/40 px-3 py-2">
-                              <div className="text-xs text-muted-foreground">Remaining</div>
-                              <div
-                                className={cn(
-                                  "font-medium",
-                                  cat.left < 0 ? "text-destructive" : "text-primary"
-                                )}
-                              >
-                                {fmt(cat.left)}
-                              </div>
-                            </div>
-                          </div>
-
-                          <div className="flex items-center justify-between gap-3">
-                            <div className="h-2 flex-1 rounded-full bg-muted overflow-hidden">
-                              <div
-                                className={cn(
-                                  "h-full",
-                                  cat.left < 0 ? "bg-destructive" : "bg-primary"
-                                )}
-                                style={{ width: `${percent}%` }}
-                              />
-                            </div>
-                            <div className="shrink-0 text-xs text-muted-foreground">
-                              {txLoading
-                                ? "Loading transactions..."
-                                : `${group?.count ?? 0} transaction${group?.count === 1 ? "" : "s"}`}
-                            </div>
-                          </div>
-                        </div>
-                      </AccordionTrigger>
-                      <AccordionContent className="border-t px-3 pt-3">
-                        {txLoading ? (
-                          <div className="space-y-2">
-                            {[1, 2].map((i) => (
-                              <Skeleton key={i} className="h-20 rounded-xl" />
-                            ))}
-                          </div>
-                        ) : !group || group.transactions.length === 0 ? (
-                          <div className="pb-1 text-sm text-muted-foreground">
-                            No transactions in this category for this month.
-                          </div>
-                        ) : (
-                          <div className="space-y-3">
-                            {group.transactions.map((tx) => renderTransactionCard(tx))}
-                          </div>
-                        )}
-                      </AccordionContent>
-                    </AccordionItem>
-                  );
-                })}
 
                 {uncategorizedGroup ? (
                   <AccordionItem value="uncategorized" className="overflow-hidden rounded-xl border">

@@ -552,6 +552,7 @@ router.get("/budget/dashboard", async (req, res): Promise<void> => {
   const totalLeft = lines.reduce((s, l) => s + l.left, 0);
   const incomeAmount = Number(monthlyIncome?.amount ?? 0);
   const incomeRemaining = incomeAmount - totalSpent;
+  const budgetOverUnder = incomeAmount - totalBudgeted;
 
   const recentTxns = await db
     .select({
@@ -580,7 +581,7 @@ router.get("/budget/dashboard", async (req, res): Promise<void> => {
     totalLeft,
     incomeAmount,
     incomeRemaining,
-    budgetOverUnder: totalLeft,
+    budgetOverUnder,
     categories: lines,
     recentTransactions: recentTxns.map(serializeTransaction),
   });

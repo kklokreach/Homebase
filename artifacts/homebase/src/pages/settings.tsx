@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { addMonths, format, subMonths } from "date-fns";
 import {
+  ArrowDown,
+  ArrowUp,
   ChevronLeft,
   ChevronRight,
   Pencil,
@@ -76,6 +78,7 @@ export default function Settings() {
   const [draftGroup, setDraftGroup] = useState("");
   const [budgetDrafts, setBudgetDrafts] = useState<Record<number, string>>({});
   const [savingBudgetId, setSavingBudgetId] = useState<number | null>(null);
+  const [reorderingCategoryId, setReorderingCategoryId] = useState<number | null>(null);
 
   const year = viewDate.getFullYear();
   const month = viewDate.getMonth() + 1;
@@ -167,6 +170,36 @@ export default function Settings() {
     }
   }
 
+  async function reorderCategory(categoryId: number, direction: "up" | "down") {
+    const current = categories ?? [];
+    const index = current.findIndex((cat) => cat.id === categoryId);
+    const nextIndex = direction === "up" ? index - 1 : index + 1;
+    if (index < 0 || nextIndex < 0 || nextIndex >= current.length) return;
+
+    const reordered = [...current];
+    const currentCategory = reordered[index];
+    const nextCategory = reordered[nextIndex];
+    if (!currentCategory || !nextCategory) return;
+    reordered[index] = nextCategory;
+    reordered[nextIndex] = currentCategory;
+
+    try {
+      setReorderingCategoryId(categoryId);
+      await api<void>("/budget/categories/reorder", {
+        method: "PUT",
+        body: JSON.stringify({
+          orderedIds: reordered.map((cat) => cat.id),
+        }),
+      });
+      refresh();
+      toast({ title: "Category order updated" });
+    } catch {
+      toast({ title: "Failed to reorder category", variant: "destructive" });
+    } finally {
+      setReorderingCategoryId(null);
+    }
+  }
+
   async function handleSaveBudget(categoryId: number) {
     const budgetAmount = parseFloat(budgetDrafts[categoryId] || "0") || 0;
 
@@ -255,7 +288,7 @@ export default function Settings() {
             </div>
           ) : (
             <div className="space-y-3">
-              {categories?.map((cat) => {
+              {categories?.map((cat, index) => {
                 const editing = editingId === cat.id;
                 const row = dashboardMap.get(cat.id);
 
@@ -277,6 +310,24 @@ export default function Settings() {
                             </div>
                           </div>
                           <div className="flex gap-2">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => reorderCategory(cat.id, "up")}
+                              disabled={index === 0 || reorderingCategoryId === cat.id}
+                              aria-label={`Move ${cat.name} up`}
+                            >
+                              <ArrowUp className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => reorderCategory(cat.id, "down")}
+                              disabled={index === (categories?.length ?? 0) - 1 || reorderingCategoryId === cat.id}
+                              aria-label={`Move ${cat.name} down`}
+                            >
+                              <ArrowDown className="h-4 w-4" />
+                            </Button>
                             <Button
                               variant="outline"
                               size="icon"
