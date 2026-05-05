@@ -37,6 +37,10 @@ type Category = {
   sortOrder: number;
 };
 
+type CategoryOption = Category & {
+  available?: number | null;
+};
+
 type Transaction = {
   id: number;
   amount: number;
@@ -129,6 +133,12 @@ function fmt(n: number, showSign = false) {
   return abs;
 }
 
+function categoryOptionLabel(cat: CategoryOption) {
+  return cat.available == null
+    ? cat.name
+    : `${cat.name} (${fmt(cat.available)} available)`;
+}
+
 function todayInputValue() {
   return new Date().toISOString().split("T")[0];
 }
@@ -189,10 +199,12 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
 function TransactionForm({
   year,
   month,
+  categories,
   onSaved,
 }: {
   year: number;
   month: number;
+  categories: CategoryOption[];
   onSaved: () => void;
 }) {
   const savedCat =
@@ -206,7 +218,6 @@ function TransactionForm({
   const [notes, setNotes] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const { toast } = useToast();
-  const { data: categories } = useListBudgetCategories();
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -265,9 +276,9 @@ function TransactionForm({
           className="h-10 rounded-md border border-input bg-background px-3 text-sm"
         >
           <option value="null">No category</option>
-          {(categories ?? []).map((cat) => (
+          {categories.map((cat) => (
             <option key={cat.id} value={String(cat.id)}>
-              {cat.name}
+              {categoryOptionLabel(cat)}
             </option>
           ))}
         </select>
@@ -425,6 +436,21 @@ export default function Finances() {
   const budgetOverUnder =
     dashboardView?.budgetOverUnder ??
     ((dashboardView?.incomeAmount ?? 0) - (dashboard?.totalBudgeted ?? 0));
+  const dashboardCategoryById = useMemo(() => {
+    const map = new Map<number, DashboardCategory>();
+    for (const cat of dashboardCategories) {
+      map.set(cat.categoryId, cat);
+    }
+    return map;
+  }, [dashboardCategories]);
+  const categoryOptions = useMemo<CategoryOption[]>(
+    () =>
+      (categories as Category[]).map((cat) => ({
+        ...cat,
+        available: dashboardCategoryById.get(cat.id)?.available ?? null,
+      })),
+    [categories, dashboardCategoryById],
+  );
 
   async function refreshTransactions() {
     try {
@@ -893,9 +919,9 @@ export default function Finances() {
                 className="h-10 rounded-md border border-input bg-background px-3 text-sm"
               >
                 <option value="null">No category</option>
-                {categories.map((cat) => (
+                {categoryOptions.map((cat) => (
                   <option key={cat.id} value={String(cat.id)}>
-                    {cat.name}
+                    {categoryOptionLabel(cat)}
                   </option>
                 ))}
               </select>
@@ -1053,7 +1079,7 @@ export default function Finances() {
         <h1 className="text-2xl font-semibold">Finances</h1>
       </div>
 
-      <TransactionForm year={year} month={month} onSaved={refreshAll} />
+      <TransactionForm year={year} month={month} categories={categoryOptions} onSaved={refreshAll} />
 
       {isLoading || !dashboard ? (
         <>
