@@ -6,43 +6,25 @@ import {
   getGetTodaySummaryQueryKey,
   getGetHomeSnapshotQueryKey,
 } from "@workspace/api-client-react";
-import type { Task } from "@workspace/api-client-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { TaskQuickAdd } from "@/components/task-quick-add";
 import { TaskItem } from "@/components/task-item";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
-import { ArrowUpDown, CheckSquare } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, CheckSquare } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiFetch } from "@/lib/api-base";
-
-type GroupableTask = Task & {
-  parentTaskId?: number | null;
-  sortOrder?: number;
-  category?: string | null;
-};
-
-type TaskGroup = {
-  key: string;
-  label: string;
-  tasks: GroupableTask[];
-};
-
-function taskGroupLabel(category?: string | null) {
-  return category?.trim() || "Ungrouped";
-}
-
-function taskGroupKey(label: string) {
-  return label.trim().toLocaleLowerCase();
-}
-
-function orderedTaskIdsFromGroups(groups: TaskGroup[]) {
-  return groups.flatMap((group) => group.tasks.map((task) => task.id));
-}
+import {
+  getTaskGroups,
+  orderedTaskIdsFromGroups,
+  showTaskGroupHeaders,
+  type GroupableTask,
+} from "@/lib/task-groups";
 
 export default function Tasks() {
   const [view, setView] = useState<"today" | "upcoming" | "mine" | "wife" | "shared">("today");
   const [reorderingTaskId, setReorderingTaskId] = useState<number | null>(null);
+  const [reorderingGroupKey, setReorderingGroupKey] = useState<string | null>(null);
   const [reorderMode, setReorderMode] = useState(false);
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -52,24 +34,9 @@ export default function Tasks() {
     { query: { queryKey: getListTasksQueryKey({ view }) } }
   );
   const taskItems = useMemo(() => (tasks ?? []) as GroupableTask[], [tasks]);
-  const taskGroups = useMemo<TaskGroup[]>(() => {
-    const groups = new Map<string, TaskGroup>();
-
-    for (const task of taskItems) {
-      const label = taskGroupLabel(task.category);
-      const key = taskGroupKey(label);
-
-      if (!groups.has(key)) {
-        groups.set(key, { key, label, tasks: [] });
-      }
-
-      groups.get(key)!.tasks.push(task);
-    }
-
-    return Array.from(groups.values());
-  }, [taskItems]);
-  const showGroupHeaders =
-    taskGroups.length > 1 || taskGroups.some((group) => group.label !== "Ungrouped");
+  const taskGroups = useMemo(() => getTaskGroups(taskItems), [taskItems]);
+  const showGroupHeaders = showTaskGroupHeaders(taskGroups);
+  const reorderBusy = reorderingTaskId !== null || reorderingGroupKey !== null;
 
   function refreshTasks() {
     queryClient.invalidateQueries({ queryKey: getListTasksQueryKey() });
@@ -112,6 +79,41 @@ export default function Tasks() {
       toast({ title: "Failed to reorder task", variant: "destructive" });
     } finally {
       setReorderingTaskId(null);
+    }
+  }
+
+  async function moveGroup(groupKeyValue: string, direction: "up" | "down") {
+    const index = taskGroups.findIndex((group) => group.key === groupKeyValue);
+    const nextIndex = direction === "up" ? index - 1 : index + 1;
+    if (index < 0 || nextIndex < 0 || nextIndex >= taskGroups.length) return;
+
+    const reorderedGroups = taskGroups.map((group) => ({
+      ...group,
+      tasks: [...group.tasks],
+    }));
+    const currentGroup = reorderedGroups[index];
+    const nextGroup = reorderedGroups[nextIndex];
+    if (!currentGroup || !nextGroup) return;
+    reorderedGroups[index] = nextGroup;
+    reorderedGroups[nextIndex] = currentGroup;
+
+    try {
+      setReorderingGroupKey(groupKeyValue);
+      const res = await apiFetch("/api/tasks/reorder", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          parentTaskId: null,
+          orderedIds: orderedTaskIdsFromGroups(reorderedGroups),
+        }),
+      });
+
+      if (!res.ok) throw new Error(await res.text());
+      refreshTasks();
+    } catch {
+      toast({ title: "Failed to reorder task group", variant: "destructive" });
+    } finally {
+      setReorderingGroupKey(null);
     }
   }
 
@@ -173,14 +175,42 @@ export default function Tasks() {
                   </Button>
                 </div>
               )}
-              {taskGroups.map((group) => (
+              {taskGroups.map((group, groupIndex) => (
                 <section key={group.key} className="space-y-2">
                   {showGroupHeaders && (
                     <div className="flex items-center justify-between gap-3 px-1 pt-2">
-                      <h2 className="text-sm font-semibold text-muted-foreground">{group.label}</h2>
-                      <div className="text-xs text-muted-foreground">
-                        {group.tasks.length} task{group.tasks.length === 1 ? "" : "s"}
+                      <div className="min-w-0">
+                        <h2 className="text-sm font-semibold text-muted-foreground">{group.label}</h2>
+                        <div className="text-xs text-muted-foreground">
+                          {group.tasks.length} task{group.tasks.length === 1 ? "" : "s"}
+                        </div>
                       </div>
+                      {reorderMode && taskGroups.length > 1 && (
+                        <div className="flex shrink-0 items-center gap-1">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                            onClick={() => moveGroup(group.key, "up")}
+                            disabled={groupIndex === 0 || reorderBusy}
+                            aria-label={`Move ${group.label} group up`}
+                          >
+                            <ArrowUp className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                            onClick={() => moveGroup(group.key, "down")}
+                            disabled={groupIndex === taskGroups.length - 1 || reorderBusy}
+                            aria-label={`Move ${group.label} group down`}
+                          >
+                            <ArrowDown className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      )}
                     </div>
                   )}
 
@@ -189,9 +219,9 @@ export default function Tasks() {
                       key={task.id}
                       task={task}
                       index={i}
-                      canMoveUp={reorderMode && i > 0}
-                      canMoveDown={reorderMode && i < group.tasks.length - 1}
-                      isReordering={reorderingTaskId === task.id}
+                      canMoveUp={reorderMode && !reorderBusy && i > 0}
+                      canMoveDown={reorderMode && !reorderBusy && i < group.tasks.length - 1}
+                      isReordering={reorderBusy}
                       onMoveUp={reorderMode ? () => moveTask(task.id, group.key, "up") : undefined}
                       onMoveDown={reorderMode ? () => moveTask(task.id, group.key, "down") : undefined}
                     />

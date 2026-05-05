@@ -1,10 +1,21 @@
 import { format } from "date-fns";
 import { ChevronRight } from "lucide-react";
+import { useMemo } from "react";
 import { Link } from "wouter";
-import { useGetHomeSnapshot, getGetHomeSnapshotQueryKey } from "@workspace/api-client-react";
+import {
+  useGetHomeSnapshot,
+  useListTasks,
+  getGetHomeSnapshotQueryKey,
+  getListTasksQueryKey,
+} from "@workspace/api-client-react";
 import { TaskItem } from "@/components/task-item";
 import { TaskQuickAdd } from "@/components/task-quick-add";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  getTaskGroups,
+  showTaskGroupHeaders,
+  type GroupableTask,
+} from "@/lib/task-groups";
 
 function fmt(n: number) {
   return n.toLocaleString("en-US", {
@@ -32,6 +43,13 @@ export default function Home() {
   const { data: snapshot, isLoading, error } = useGetHomeSnapshot({
     query: { queryKey: getGetHomeSnapshotQueryKey() },
   });
+  const { data: todayTaskData, isLoading: tasksLoading } = useListTasks(
+    { view: "today" },
+    { query: { queryKey: getListTasksQueryKey({ view: "today" }) } },
+  );
+  const todayTasks = useMemo(() => (todayTaskData ?? []) as GroupableTask[], [todayTaskData]);
+  const todayTaskGroups = useMemo(() => getTaskGroups(todayTasks), [todayTasks]);
+  const showGroupHeaders = showTaskGroupHeaders(todayTaskGroups);
 
   if (isLoading) {
     return (
@@ -51,19 +69,13 @@ export default function Home() {
   if (error) return <div className="px-4 pt-5 max-w-2xl mx-auto text-sm text-destructive">{homeLoadErrorMessage(error)}</div>;
 if (!snapshot) return <div className="px-4 pt-5 max-w-2xl mx-auto text-sm text-muted-foreground">No home data returned yet.</div>;
 
-  const { todayTasks, budgetSnapshot, recentTransactions } = snapshot;
+  const { budgetSnapshot, recentTransactions } = snapshot;
   const left = budgetSnapshot.totalLeft;
   const spent = budgetSnapshot.totalSpent;
   const available = budgetSnapshot.totalAvailable;
   const pct = available > 0 ? Math.min(100, Math.round((spent / available) * 100)) : 0;
   const isOver = left < 0;
   const todayDate = format(new Date(), "EEE, MMM d");
-
-  const allTasks = [
-    ...todayTasks.me,
-    ...todayTasks.wife,
-    ...todayTasks.shared,
-  ];
 
   return (
     <div className="flex flex-col min-h-full">
@@ -119,14 +131,32 @@ if (!snapshot) return <div className="px-4 pt-5 max-w-2xl mx-auto text-sm text-m
             </Link>
           </div>
 
-          {allTasks.length === 0 ? (
+          {tasksLoading ? (
+            <div className="space-y-2">
+              {[1, 2, 3].map((i) => (
+                <Skeleton key={i} className="h-12 rounded-xl" />
+              ))}
+            </div>
+          ) : todayTasks.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground text-sm">
               Nothing due today. Enjoy it.
             </div>
           ) : (
-            <div className="space-y-2">
-              {allTasks.map((task, i) => (
-                <TaskItem key={task.id} task={task} index={i} compact />
+            <div className="space-y-3">
+              {todayTaskGroups.map((group) => (
+                <section key={group.key} className="space-y-2">
+                  {showGroupHeaders && (
+                    <div className="flex items-center justify-between gap-3 px-1 pt-1">
+                      <h3 className="text-xs font-semibold text-muted-foreground">{group.label}</h3>
+                      <div className="text-xs text-muted-foreground">
+                        {group.tasks.length} task{group.tasks.length === 1 ? "" : "s"}
+                      </div>
+                    </div>
+                  )}
+                  {group.tasks.map((task, i) => (
+                    <TaskItem key={task.id} task={task} index={i} compact />
+                  ))}
+                </section>
               ))}
             </div>
           )}
