@@ -1,6 +1,6 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { ArrowDown, ArrowUp, Check, ChevronDown, Clock, Edit2, ListChecks, Plus, Trash2, User, Users } from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronDown, Clock, Edit2, ListChecks, Plus, Tag, Trash2, User, Users } from "lucide-react";
 import { format } from "date-fns";
 import {
   useCreateTask,
@@ -29,6 +29,7 @@ import { useToast } from "@/hooks/use-toast";
 type TaskWithSubtasks = Task & {
   parentTaskId?: number | null;
   sortOrder?: number;
+  category?: string | null;
   subtaskSummary?: {
     total: number;
     completed: number;
@@ -36,6 +37,15 @@ type TaskWithSubtasks = Task & {
   };
   subtasks?: TaskWithSubtasks[];
 };
+
+function dateInputValue(value?: string | Date | null) {
+  return value ? String(value).slice(0, 10) : "";
+}
+
+function dateForDisplay(value: string | Date) {
+  if (value instanceof Date) return value;
+  return new Date(value.length === 10 ? `${value}T00:00:00` : value);
+}
 
 interface TaskItemProps {
   task: TaskWithSubtasks;
@@ -65,6 +75,8 @@ export function TaskItem({
   const [newSubtaskTitle, setNewSubtaskTitle] = useState("");
   const [editTitle, setEditTitle] = useState(task.title);
   const [editAssignee, setEditAssignee] = useState<string>(task.assignee || "null");
+  const [editDueDate, setEditDueDate] = useState(dateInputValue(task.dueDate));
+  const [editCategory, setEditCategory] = useState(task.category ?? "");
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
@@ -110,7 +122,9 @@ export function TaskItem({
         data: {
           title: editTitle,
           assignee: editAssignee === "null" ? null : (editAssignee as any),
-        },
+          dueDate: editDueDate || null,
+          category: editCategory.trim() || null,
+        } as any,
       },
       {
         onSuccess: () => {
@@ -153,6 +167,22 @@ export function TaskItem({
     }
   };
 
+  const categoryLabel = task.category?.trim();
+  const categoryBadge = categoryLabel ? (
+    <Badge variant="outline" className="border-primary/20 bg-primary/5 text-primary">
+      <Tag className="w-3 h-3 mr-1" />
+      {categoryLabel}
+    </Badge>
+  ) : null;
+
+  const startEditing = () => {
+    setEditTitle(task.title);
+    setEditAssignee(task.assignee || "null");
+    setEditDueDate(dateInputValue(task.dueDate));
+    setEditCategory(task.category ?? "");
+    setIsEditing(true);
+  };
+
   const assigneeColors: Record<string, string> = {
     me: "bg-primary text-primary-foreground",
     wife: "bg-secondary text-secondary-foreground",
@@ -169,6 +199,8 @@ export function TaskItem({
         data: {
           title: newSubtaskTitle.trim(),
           assignee: task.assignee ?? null,
+          dueDate: task.dueDate ?? null,
+          category: task.category ?? null,
           parentTaskId: task.id,
         } as any,
       },
@@ -215,13 +247,14 @@ export function TaskItem({
               {task.title}
             </div>
             
-            {!compact && ((task.assignee || task.dueDate) || hasSubtasks) && !isOpen && (
+            {!compact && ((task.assignee || task.dueDate || task.category) || hasSubtasks) && !isOpen && (
               <div className="flex flex-wrap items-center gap-2 mt-1.5 opacity-80">
                 {getAssigneeBadge()}
+                {categoryBadge}
                 {task.dueDate && (
                   <div className="flex items-center text-xs text-muted-foreground">
                     <Clock className="w-3 h-3 mr-1" />
-                    {format(new Date(task.dueDate), "MMM d")}
+                    {format(dateForDisplay(task.dueDate), "MMM d")}
                   </div>
                 )}
                 {hasSubtasks && (
@@ -278,7 +311,7 @@ export function TaskItem({
             )}
             {task.dueDate && (
               <span className="text-xs text-muted-foreground tabular-nums">
-                {format(new Date(task.dueDate + "T00:00:00"), "MMM d")}
+                {format(dateForDisplay(task.dueDate), "MMM d")}
               </span>
             )}
             {task.assignee && (
@@ -286,7 +319,7 @@ export function TaskItem({
                 {assigneeLabel[task.assignee] || task.assignee}
               </span>
             )}
-            {(hasSubtasks || task.notes || task.dueDate || task.assignee) && (
+            {(hasSubtasks || task.notes || task.dueDate || task.assignee || task.category) && (
               <ChevronDown className={cn("w-4 h-4 text-muted-foreground transition-transform", isOpen && "rotate-180")} />
             )}
           </div>
@@ -324,19 +357,39 @@ export function TaskItem({
                   className="bg-background"
                 />
               </div>
-              <div className="space-y-2">
-                <Label>Assignee</Label>
-                <Select value={editAssignee} onValueChange={setEditAssignee}>
-                  <SelectTrigger className="bg-background">
-                    <SelectValue placeholder="Unassigned" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="null">Unassigned</SelectItem>
-                    <SelectItem value="me">Patrick</SelectItem>
-                    <SelectItem value="wife">Lauren</SelectItem>
-                    <SelectItem value="us">Us</SelectItem>
-                  </SelectContent>
-                </Select>
+              <div className="grid gap-3 sm:grid-cols-3">
+                <div className="space-y-2">
+                  <Label>Assignee</Label>
+                  <Select value={editAssignee} onValueChange={setEditAssignee}>
+                    <SelectTrigger className="bg-background">
+                      <SelectValue placeholder="Unassigned" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="null">Unassigned</SelectItem>
+                      <SelectItem value="me">Patrick</SelectItem>
+                      <SelectItem value="wife">Lauren</SelectItem>
+                      <SelectItem value="us">Us</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Due Date</Label>
+                  <Input
+                    type="date"
+                    value={editDueDate}
+                    onChange={(e) => setEditDueDate(e.target.value)}
+                    className="bg-background"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Group</Label>
+                  <Input
+                    value={editCategory}
+                    onChange={(e) => setEditCategory(e.target.value)}
+                    placeholder="Home, Errands..."
+                    className="bg-background"
+                  />
+                </div>
               </div>
               <div className="flex justify-end gap-2 pt-2">
                 <Button variant="ghost" size="sm" onClick={() => setIsEditing(false)}>Cancel</Button>
@@ -357,20 +410,25 @@ export function TaskItem({
                     <span className="text-[10px] uppercase tracking-wider font-semibold opacity-50 mb-1">Assignee</span>
                     <div>{getAssigneeBadge() || <span className="text-xs">Unassigned</span>}</div>
                   </div>
+
+                  <div className="flex flex-col">
+                    <span className="text-[10px] uppercase tracking-wider font-semibold opacity-50 mb-1">Group</span>
+                    <div>{categoryBadge || <span className="text-xs">Ungrouped</span>}</div>
+                  </div>
                   
                   {task.dueDate && (
                     <div className="flex flex-col">
                       <span className="text-[10px] uppercase tracking-wider font-semibold opacity-50 mb-1">Due Date</span>
                       <div className="flex items-center text-xs text-foreground font-medium">
                         <Clock className="w-3.5 h-3.5 mr-1.5 text-primary" />
-                        {format(new Date(task.dueDate), "MMM d, yyyy")}
+                        {format(dateForDisplay(task.dueDate), "MMM d, yyyy")}
                       </div>
                     </div>
                   )}
                 </div>
                 
                 <div className="flex gap-1">
-                  <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground" onClick={() => setIsEditing(true)}>
+                  <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground" onClick={startEditing}>
                     <Edit2 className="w-4 h-4" />
                   </Button>
                   <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10" onClick={handleDelete}>

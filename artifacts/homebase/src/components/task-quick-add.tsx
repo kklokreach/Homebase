@@ -24,6 +24,8 @@ export function TaskQuickAdd({ defaultAssignee = null, placeholder = "Add a new 
   const [title, setTitle] = useState("");
   const [showOptions, setShowOptions] = useState(false);
   const [assignee, setAssignee] = useState<"me" | "wife" | "us" | "null">(defaultAssignee ?? "null");
+  const [dueDate, setDueDate] = useState("");
+  const [category, setCategory] = useState("");
   const [parentTaskId, setParentTaskId] = useState<string>("null");
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -39,6 +41,8 @@ export function TaskQuickAdd({ defaultAssignee = null, placeholder = "Add a new 
         data: {
           title: title.trim(),
           assignee: assignee === "null" ? null : assignee,
+          dueDate: dueDate || null,
+          category: category.trim() || null,
           parentTaskId: parentTaskId === "null" ? null : Number(parentTaskId),
         } as any,
       },
@@ -46,6 +50,8 @@ export function TaskQuickAdd({ defaultAssignee = null, placeholder = "Add a new 
         onSuccess: () => {
           setTitle("");
           setAssignee("null");
+          setDueDate("");
+          setCategory("");
           setParentTaskId("null");
           queryClient.invalidateQueries({ queryKey: getListTasksQueryKey() });
           queryClient.invalidateQueries({ queryKey: getGetTodaySummaryQueryKey() });
@@ -94,7 +100,7 @@ export function TaskQuickAdd({ defaultAssignee = null, placeholder = "Add a new 
       </div>
 
       {showOptions && (
-        <div className="grid gap-3 rounded-2xl border border-border/50 bg-card/60 p-4 sm:grid-cols-2">
+        <div className="grid gap-3 rounded-2xl border border-border/50 bg-card/60 p-4 sm:grid-cols-2 lg:grid-cols-4">
           <div className="space-y-2">
             <Label htmlFor="task-assignee">Assignee</Label>
             <Select value={assignee} onValueChange={(value) => setAssignee(value as "me" | "wife" | "us" | "null")}>
@@ -108,6 +114,28 @@ export function TaskQuickAdd({ defaultAssignee = null, placeholder = "Add a new 
                 <SelectItem value="us">Shared</SelectItem>
               </SelectContent>
             </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="task-due-date">Due Date</Label>
+            <Input
+              id="task-due-date"
+              type="date"
+              value={dueDate}
+              onChange={(e) => setDueDate(e.target.value)}
+              className="bg-background"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="task-category">Group</Label>
+            <Input
+              id="task-category"
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+              placeholder="Home, Errands..."
+              className="bg-background"
+            />
           </div>
 
           <div className="space-y-2">

@@ -45,6 +45,13 @@ type DashboardCategory = {
   left: number;
 };
 
+type DashboardWithIncome = {
+  incomeAmount?: number;
+  incomeRemaining?: number;
+  totalBudgeted?: number;
+  categories: DashboardCategory[];
+};
+
 type CategoryGroup = {
   key: string;
   label: string;
@@ -109,6 +116,8 @@ export default function Settings() {
   const [savingBudgetId, setSavingBudgetId] = useState<number | null>(null);
   const [reorderingCategoryId, setReorderingCategoryId] = useState<number | null>(null);
   const [reorderingGroupKey, setReorderingGroupKey] = useState<string | null>(null);
+  const [incomeDraft, setIncomeDraft] = useState("");
+  const [savingIncome, setSavingIncome] = useState(false);
 
   const year = viewDate.getFullYear();
   const month = viewDate.getMonth() + 1;
@@ -121,6 +130,10 @@ export default function Settings() {
     { year, month },
     { query: { queryKey: getGetBudgetDashboardQueryKey({ year, month }) } },
   );
+  const dashboardView = dashboard as DashboardWithIncome | undefined;
+  const incomeRemaining =
+    dashboardView?.incomeRemaining ??
+    ((dashboardView?.incomeAmount ?? 0) - (dashboardView?.totalBudgeted ?? 0));
 
   function refresh() {
     queryClient.invalidateQueries({ queryKey: getListBudgetCategoriesQueryKey() });
@@ -130,21 +143,26 @@ export default function Settings() {
   }
 
   useEffect(() => {
-    if (!dashboard) return;
+    if (!dashboardView) return;
     const next: Record<number, string> = {};
-    for (const cat of dashboard.categories as DashboardCategory[]) {
+    for (const cat of dashboardView.categories as DashboardCategory[]) {
       next[cat.categoryId] = String(cat.budgeted ?? 0);
     }
     setBudgetDrafts(next);
-  }, [dashboard]);
+  }, [dashboardView]);
+
+  useEffect(() => {
+    if (!dashboardView) return;
+    setIncomeDraft(String(dashboardView.incomeAmount ?? 0));
+  }, [dashboardView?.incomeAmount, year, month]);
 
   const dashboardMap = useMemo(() => {
     const map = new Map<number, DashboardCategory>();
-    for (const cat of (dashboard?.categories ?? []) as DashboardCategory[]) {
+    for (const cat of (dashboardView?.categories ?? []) as DashboardCategory[]) {
       map.set(cat.categoryId, cat);
     }
     return map;
-  }, [dashboard]);
+  }, [dashboardView]);
 
   const categoryGroups = useMemo<CategoryGroup[]>(() => {
     const groups = new Map<string, CategoryGroup>();
@@ -342,6 +360,25 @@ export default function Settings() {
     }
   }
 
+  async function saveIncome(e: FormEvent) {
+    e.preventDefault();
+    const amount = parseFloat(incomeDraft || "0") || 0;
+
+    try {
+      setSavingIncome(true);
+      await api("/budget/income", {
+        method: "PUT",
+        body: JSON.stringify({ year, month, amount }),
+      });
+      refresh();
+      toast({ title: "Income updated" });
+    } catch {
+      toast({ title: "Failed to update income", variant: "destructive" });
+    } finally {
+      setSavingIncome(false);
+    }
+  }
+
   const reorderBusy = reorderingCategoryId !== null || reorderingGroupKey !== null;
 
   return (
@@ -352,10 +389,10 @@ export default function Settings() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <SettingsIcon className="h-5 w-5" />
-            Budget Categories
+            Budget Settings
           </CardTitle>
           <CardDescription>
-            Manage category groups, category order, and monthly budget amounts here.
+            Manage income, category groups, category order, and monthly budget amounts here.
           </CardDescription>
         </CardHeader>
 
@@ -377,6 +414,36 @@ export default function Settings() {
               </Button>
             </div>
           </div>
+
+          <form
+            onSubmit={saveIncome}
+            className="grid gap-3 rounded-xl border border-border/50 bg-background/50 p-3 md:grid-cols-[minmax(0,1fr)_220px_auto] md:items-end"
+          >
+            <div>
+              <div className="text-sm font-medium">Monthly income</div>
+              <div
+                className={
+                  incomeRemaining < 0
+                    ? "mt-1 text-sm font-medium text-destructive"
+                    : "mt-1 text-sm font-medium text-primary"
+                }
+              >
+                Income left {money(incomeRemaining)}
+              </div>
+            </div>
+            <Input
+              inputMode="decimal"
+              value={incomeDraft}
+              onChange={(e) => setIncomeDraft(e.target.value.replace(/[^0-9.]/g, ""))}
+              placeholder="0.00"
+              disabled={dashboardLoading || savingIncome}
+              className="bg-background border-border/50"
+            />
+            <Button type="submit" disabled={dashboardLoading || savingIncome}>
+              <Save className="mr-2 h-4 w-4" />
+              {savingIncome ? "Saving..." : "Save"}
+            </Button>
+          </form>
 
           <form onSubmit={handleAddCategory} className="grid gap-2 md:grid-cols-[minmax(0,1fr)_220px_auto]">
             <Input

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useListTasks,
@@ -6,6 +6,7 @@ import {
   getGetTodaySummaryQueryKey,
   getGetHomeSnapshotQueryKey,
 } from "@workspace/api-client-react";
+import type { Task } from "@workspace/api-client-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { TaskQuickAdd } from "@/components/task-quick-add";
 import { TaskItem } from "@/components/task-item";
@@ -14,6 +15,30 @@ import { Button } from "@/components/ui/button";
 import { ArrowUpDown, CheckSquare } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiFetch } from "@/lib/api-base";
+
+type GroupableTask = Task & {
+  parentTaskId?: number | null;
+  sortOrder?: number;
+  category?: string | null;
+};
+
+type TaskGroup = {
+  key: string;
+  label: string;
+  tasks: GroupableTask[];
+};
+
+function taskGroupLabel(category?: string | null) {
+  return category?.trim() || "Ungrouped";
+}
+
+function taskGroupKey(label: string) {
+  return label.trim().toLocaleLowerCase();
+}
+
+function orderedTaskIdsFromGroups(groups: TaskGroup[]) {
+  return groups.flatMap((group) => group.tasks.map((task) => task.id));
+}
 
 export default function Tasks() {
   const [view, setView] = useState<"today" | "upcoming" | "mine" | "wife" | "shared">("today");
@@ -26,6 +51,25 @@ export default function Tasks() {
     { view },
     { query: { queryKey: getListTasksQueryKey({ view }) } }
   );
+  const taskItems = useMemo(() => (tasks ?? []) as GroupableTask[], [tasks]);
+  const taskGroups = useMemo<TaskGroup[]>(() => {
+    const groups = new Map<string, TaskGroup>();
+
+    for (const task of taskItems) {
+      const label = taskGroupLabel(task.category);
+      const key = taskGroupKey(label);
+
+      if (!groups.has(key)) {
+        groups.set(key, { key, label, tasks: [] });
+      }
+
+      groups.get(key)!.tasks.push(task);
+    }
+
+    return Array.from(groups.values());
+  }, [taskItems]);
+  const showGroupHeaders =
+    taskGroups.length > 1 || taskGroups.some((group) => group.label !== "Ungrouped");
 
   function refreshTasks() {
     queryClient.invalidateQueries({ queryKey: getListTasksQueryKey() });
@@ -33,18 +77,23 @@ export default function Tasks() {
     queryClient.invalidateQueries({ queryKey: getGetHomeSnapshotQueryKey() });
   }
 
-  async function moveTask(taskId: number, direction: "up" | "down") {
-    const current = tasks ?? [];
-    const index = current.findIndex((task) => task.id === taskId);
-    const nextIndex = direction === "up" ? index - 1 : index + 1;
-    if (index < 0 || nextIndex < 0 || nextIndex >= current.length) return;
+  async function moveTask(taskId: number, groupKeyValue: string, direction: "up" | "down") {
+    const reorderedGroups = taskGroups.map((group) => ({
+      ...group,
+      tasks: [...group.tasks],
+    }));
+    const group = reorderedGroups.find((item) => item.key === groupKeyValue);
+    if (!group) return;
 
-    const reordered = [...current];
-    const currentTask = reordered[index];
-    const nextTask = reordered[nextIndex];
+    const index = group.tasks.findIndex((task) => task.id === taskId);
+    const nextIndex = direction === "up" ? index - 1 : index + 1;
+    if (index < 0 || nextIndex < 0 || nextIndex >= group.tasks.length) return;
+
+    const currentTask = group.tasks[index];
+    const nextTask = group.tasks[nextIndex];
     if (!currentTask || !nextTask) return;
-    reordered[index] = nextTask;
-    reordered[nextIndex] = currentTask;
+    group.tasks[index] = nextTask;
+    group.tasks[nextIndex] = currentTask;
 
     try {
       setReorderingTaskId(taskId);
@@ -53,7 +102,7 @@ export default function Tasks() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           parentTaskId: null,
-          orderedIds: reordered.map((task) => task.id),
+          orderedIds: orderedTaskIdsFromGroups(reorderedGroups),
         }),
       });
 
@@ -101,7 +150,7 @@ export default function Tasks() {
               <Skeleton className="h-16 w-full rounded-xl" />
               <Skeleton className="h-16 w-full rounded-xl" />
             </div>
-          ) : tasks?.length === 0 ? (
+          ) : taskItems.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 text-center space-y-3 bg-muted/10 rounded-2xl border border-dashed border-border/50">
               <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center text-primary mb-2">
                 <CheckSquare className="w-6 h-6 opacity-80" />
@@ -111,7 +160,7 @@ export default function Tasks() {
             </div>
           ) : (
             <div className="space-y-3">
-              {(tasks?.length ?? 0) > 1 && (
+              {taskItems.length > 1 && (
                 <div className="flex justify-end">
                   <Button
                     type="button"
@@ -124,17 +173,30 @@ export default function Tasks() {
                   </Button>
                 </div>
               )}
-              {tasks?.map((task, i) => (
-                <TaskItem
-                  key={task.id}
-                  task={task}
-                  index={i}
-                  canMoveUp={reorderMode && i > 0}
-                  canMoveDown={reorderMode && i < tasks.length - 1}
-                  isReordering={reorderingTaskId === task.id}
-                  onMoveUp={reorderMode ? () => moveTask(task.id, "up") : undefined}
-                  onMoveDown={reorderMode ? () => moveTask(task.id, "down") : undefined}
-                />
+              {taskGroups.map((group) => (
+                <section key={group.key} className="space-y-2">
+                  {showGroupHeaders && (
+                    <div className="flex items-center justify-between gap-3 px-1 pt-2">
+                      <h2 className="text-sm font-semibold text-muted-foreground">{group.label}</h2>
+                      <div className="text-xs text-muted-foreground">
+                        {group.tasks.length} task{group.tasks.length === 1 ? "" : "s"}
+                      </div>
+                    </div>
+                  )}
+
+                  {group.tasks.map((task, i) => (
+                    <TaskItem
+                      key={task.id}
+                      task={task}
+                      index={i}
+                      canMoveUp={reorderMode && i > 0}
+                      canMoveDown={reorderMode && i < group.tasks.length - 1}
+                      isReordering={reorderingTaskId === task.id}
+                      onMoveUp={reorderMode ? () => moveTask(task.id, group.key, "up") : undefined}
+                      onMoveDown={reorderMode ? () => moveTask(task.id, group.key, "down") : undefined}
+                    />
+                  ))}
+                </section>
               ))}
             </div>
           )}

@@ -406,8 +406,6 @@ export default function Finances() {
   const [reserveTransactionDraft, setReserveTransactionDraft] = useState<ReserveTransactionDraft>(() =>
     emptyReserveTransactionDraft(0)
   );
-  const [incomeDraft, setIncomeDraft] = useState("");
-  const [savingIncome, setSavingIncome] = useState(false);
 
   const year = viewDate.getFullYear();
   const month = viewDate.getMonth() + 1;
@@ -472,32 +470,8 @@ export default function Finances() {
   }, [year, month]);
 
   useEffect(() => {
-    if (!dashboardView) return;
-    setIncomeDraft(String(dashboardView.incomeAmount ?? 0));
-  }, [dashboardView?.incomeAmount, year, month]);
-
-  useEffect(() => {
     refreshReserves();
   }, []);
-
-  async function saveIncome(e: React.FormEvent) {
-    e.preventDefault();
-    const amount = parseFloat(incomeDraft || "0") || 0;
-
-    try {
-      setSavingIncome(true);
-      await api("/budget/income", {
-        method: "PUT",
-        body: JSON.stringify({ year, month, amount }),
-      });
-      refreshAll();
-      toast({ title: "Income updated" });
-    } catch {
-      toast({ title: "Failed to update income", variant: "destructive" });
-    } finally {
-      setSavingIncome(false);
-    }
-  }
 
   function startEditTx(tx: Transaction) {
     const groupKey = tx.categoryId == null ? "uncategorized" : `category-${tx.categoryId}`;
@@ -1117,32 +1091,6 @@ export default function Finances() {
                 </Button>
               </div>
             </div>
-
-            <form onSubmit={saveIncome} className="rounded-2xl border bg-card p-4 shadow-sm">
-              <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_220px_auto] md:items-end">
-                <div>
-                  <div className="text-sm text-muted-foreground">Income</div>
-                  <div
-                    className={cn(
-                      "mt-1 text-sm font-medium",
-                      (dashboardView?.incomeRemaining ?? 0) < 0 ? "text-destructive" : "text-primary",
-                    )}
-                  >
-                    Income left {fmt(dashboardView?.incomeRemaining ?? 0)}
-                  </div>
-                </div>
-                <Input
-                  inputMode="decimal"
-                  value={incomeDraft}
-                  onChange={(e) => setIncomeDraft(e.target.value.replace(/[^0-9.]/g, ""))}
-                  placeholder="0.00"
-                />
-                <Button type="submit" disabled={savingIncome}>
-                  <Save className="mr-2 h-4 w-4" />
-                  {savingIncome ? "Saving..." : "Save"}
-                </Button>
-              </div>
-            </form>
 
             <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-6">
               {[
