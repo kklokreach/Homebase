@@ -1,6 +1,6 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
-import { ArrowDown, ArrowUp, ChevronDown, Clock, Edit2, ListChecks, Plus, Tag, Trash2, User, Users } from "lucide-react";
+import { useState, type DragEventHandler } from "react";
+import { ChevronDown, Clock, Edit2, GripVertical, ListChecks, Plus, Tag, Trash2, User, Users } from "lucide-react";
 import { format } from "date-fns";
 import {
   useCreateTask,
@@ -52,11 +52,16 @@ interface TaskItemProps {
   index?: number;
   compact?: boolean;
   isSubtask?: boolean;
-  canMoveUp?: boolean;
-  canMoveDown?: boolean;
+  dragEnabled?: boolean;
+  showDragHandle?: boolean;
+  isDragging?: boolean;
+  isDropTarget?: boolean;
   isReordering?: boolean;
-  onMoveUp?: () => void;
-  onMoveDown?: () => void;
+  onDragStart?: DragEventHandler<HTMLDivElement>;
+  onDragOver?: DragEventHandler<HTMLDivElement>;
+  onDragLeave?: DragEventHandler<HTMLDivElement>;
+  onDrop?: DragEventHandler<HTMLDivElement>;
+  onDragEnd?: DragEventHandler<HTMLDivElement>;
 }
 
 export function TaskItem({
@@ -64,11 +69,16 @@ export function TaskItem({
   index = 0,
   compact = false,
   isSubtask = false,
-  canMoveUp = false,
-  canMoveDown = false,
+  dragEnabled = false,
+  showDragHandle = false,
+  isDragging = false,
+  isDropTarget = false,
   isReordering = false,
-  onMoveUp,
-  onMoveDown,
+  onDragStart,
+  onDragOver,
+  onDragLeave,
+  onDrop,
+  onDragEnd,
 }: TaskItemProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -217,6 +227,8 @@ export function TaskItem({
     );
   };
 
+  const canDrag = dragEnabled && !isEditing;
+
   return (
     <Collapsible
       open={isOpen}
@@ -225,11 +237,32 @@ export function TaskItem({
         "group bg-card border rounded-xl overflow-hidden transition-all duration-300 animate-in fade-in slide-in-from-bottom-2",
         isOpen ? "shadow-md" : "hover:shadow-sm hover:border-primary/20",
         task.completed && "opacity-50",
-        isSubtask && "border-border/60 bg-background/70"
+        isSubtask && "border-border/60 bg-background/70",
+        canDrag && "cursor-grab active:cursor-grabbing",
+        isDragging && "opacity-50 ring-2 ring-primary/30",
+        isDropTarget && "border-primary/50 ring-2 ring-primary/40"
       )}
       style={{ animationFillMode: "both", animationDelay: `${index * 50}ms` }}
+      draggable={canDrag}
+      aria-grabbed={canDrag ? isDragging : undefined}
+      onDragStart={canDrag ? onDragStart : undefined}
+      onDragOver={canDrag ? onDragOver : undefined}
+      onDragLeave={canDrag ? onDragLeave : undefined}
+      onDrop={canDrag ? onDrop : undefined}
+      onDragEnd={canDrag ? onDragEnd : undefined}
     >
       <div className={cn("flex items-center gap-3", compact ? "px-3 py-2.5" : "p-3 sm:p-4")}>
+        {showDragHandle && !compact && !isSubtask && (
+          <div
+            className={cn(
+              "flex h-8 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors",
+              isReordering ? "opacity-40" : "group-hover:text-foreground"
+            )}
+          >
+            <GripVertical className="h-4 w-4" />
+          </div>
+        )}
+
         <Checkbox
           checked={task.completed}
           onCheckedChange={handleComplete}
@@ -267,39 +300,6 @@ export function TaskItem({
             )}
           </div>
         </CollapsibleTrigger>
-
-        {!compact && !isSubtask && (onMoveUp || onMoveDown) && (
-          <div className="flex shrink-0 items-center gap-1">
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8 text-muted-foreground hover:text-foreground"
-              onClick={(event) => {
-                event.stopPropagation();
-                onMoveUp?.();
-              }}
-              disabled={!canMoveUp || isReordering}
-              aria-label="Move task up"
-            >
-              <ArrowUp className="h-4 w-4" />
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8 text-muted-foreground hover:text-foreground"
-              onClick={(event) => {
-                event.stopPropagation();
-                onMoveDown?.();
-              }}
-              disabled={!canMoveDown || isReordering}
-              aria-label="Move task down"
-            >
-              <ArrowDown className="h-4 w-4" />
-            </Button>
-          </div>
-        )}
 
         {/* Compact: assignee pill + due date inline */}
         {compact && !isOpen && (
