@@ -38,7 +38,7 @@ type Category = {
 };
 
 type CategoryOption = Category & {
-  available?: number | null;
+  remaining?: number | null;
 };
 
 type Transaction = {
@@ -134,9 +134,9 @@ function fmt(n: number, showSign = false) {
 }
 
 function categoryOptionLabel(cat: CategoryOption) {
-  return cat.available == null
+  return cat.remaining == null
     ? cat.name
-    : `${cat.name} (${fmt(cat.available)} available)`;
+    : `${cat.name} (${fmt(cat.remaining)} remaining)`;
 }
 
 function todayInputValue() {
@@ -447,7 +447,7 @@ export default function Finances() {
     () =>
       (categories as Category[]).map((cat) => ({
         ...cat,
-        available: dashboardCategoryById.get(cat.id)?.available ?? null,
+        remaining: dashboardCategoryById.get(cat.id)?.left ?? null,
       })),
     [categories, dashboardCategoryById],
   );
