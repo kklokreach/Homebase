@@ -141,6 +141,27 @@ export default function Tasks() {
     await persistTaskOrder(reorderedGroups, { type: "task", taskId, sourceGroupKey });
   }
 
+  async function moveTask(taskId: number, groupKeyValue: string, direction: "up" | "down") {
+    if (reorderBusy) return;
+
+    const reorderedGroups = cloneTaskGroups(taskGroups);
+    const group = reorderedGroups.find((item) => item.key === groupKeyValue);
+    if (!group) return;
+
+    const index = group.tasks.findIndex((task) => task.id === taskId);
+    const nextIndex = direction === "up" ? index - 1 : index + 1;
+    if (index < 0 || nextIndex < 0 || nextIndex >= group.tasks.length) return;
+
+    const currentTask = group.tasks[index];
+    const nextTask = group.tasks[nextIndex];
+    if (!currentTask || !nextTask) return;
+
+    group.tasks[index] = nextTask;
+    group.tasks[nextIndex] = currentTask;
+
+    await persistTaskOrder(reorderedGroups, { type: "task", taskId, sourceGroupKey: groupKeyValue });
+  }
+
   async function reorderGroupByDrop(groupKeyValue: string, targetGroupKey: string, position: DropPosition) {
     if (groupKeyValue === targetGroupKey) return;
 
@@ -360,6 +381,10 @@ export default function Tasks() {
                       isDragging={dragState?.type === "task" && dragState.taskId === task.id}
                       isDropTarget={taskDropTarget?.groupKey === group.key && taskDropTarget.taskId === task.id}
                       isReordering={reorderBusy}
+                      canMoveUp={reorderMode && !reorderBusy && i > 0}
+                      canMoveDown={reorderMode && !reorderBusy && i < group.tasks.length - 1}
+                      onMoveUp={reorderMode ? () => void moveTask(task.id, group.key, "up") : undefined}
+                      onMoveDown={reorderMode ? () => void moveTask(task.id, group.key, "down") : undefined}
                       onDragStart={(event) => startTaskDrag(event, task.id, group.key)}
                       onDragOver={(event) => handleTaskDragOver(event, task.id, group.key)}
                       onDragLeave={(event) => handleTaskDragLeave(event, task.id, group.key)}
