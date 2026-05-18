@@ -5,6 +5,7 @@ import {
   getListTasksQueryKey,
   getGetTodaySummaryQueryKey,
   getGetHomeSnapshotQueryKey,
+  type ListTasksParams,
 } from "@workspace/api-client-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { TaskQuickAdd } from "@/components/task-quick-add";
@@ -41,6 +42,8 @@ type GroupDropTarget = {
   position: DropPosition;
 } | null;
 
+type TaskView = "all" | NonNullable<ListTasksParams["view"]>;
+
 function cloneTaskGroups(groups: readonly TaskGroup[]) {
   return groups.map((group) => ({ ...group, tasks: [...group.tasks] }));
 }
@@ -51,7 +54,7 @@ function getDropPosition(event: DragEvent<HTMLElement>): DropPosition {
 }
 
 export default function Tasks() {
-  const [view, setView] = useState<"today" | "upcoming" | "mine" | "wife" | "shared">("today");
+  const [view, setView] = useState<TaskView>("all");
   const [reorderingTaskId, setReorderingTaskId] = useState<number | null>(null);
   const [reorderingGroupKey, setReorderingGroupKey] = useState<string | null>(null);
   const [reorderMode, setReorderMode] = useState(false);
@@ -60,10 +63,11 @@ export default function Tasks() {
   const [groupDropTarget, setGroupDropTarget] = useState<GroupDropTarget>(null);
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const taskListParams = view === "all" ? undefined : { view };
   
   const { data: tasks, isLoading } = useListTasks(
-    { view },
-    { query: { queryKey: getListTasksQueryKey({ view }) } }
+    taskListParams,
+    { query: { queryKey: getListTasksQueryKey(taskListParams) } }
   );
   const { data: allTasks } = useListTasks(undefined, {
     query: { queryKey: getListTasksQueryKey() },
@@ -318,6 +322,7 @@ export default function Tasks() {
         className="w-full"
       >
         <TabsList className="w-full justify-start h-12 p-1 bg-muted/30 rounded-xl overflow-x-auto flex-nowrap shrink-0 border border-border/50">
+          <TabsTrigger value="all" className="rounded-lg data-[state=active]:bg-card data-[state=active]:shadow-sm">All</TabsTrigger>
           <TabsTrigger value="today" className="rounded-lg data-[state=active]:bg-card data-[state=active]:shadow-sm">Today</TabsTrigger>
           <TabsTrigger value="upcoming" className="rounded-lg data-[state=active]:bg-card data-[state=active]:shadow-sm">Upcoming</TabsTrigger>
           <TabsTrigger value="mine" className="rounded-lg data-[state=active]:bg-card data-[state=active]:shadow-sm">Patrick</TabsTrigger>
