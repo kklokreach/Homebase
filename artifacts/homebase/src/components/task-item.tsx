@@ -43,6 +43,9 @@ type ParentTaskOption = {
   title: string;
 };
 
+const NO_TASK_GROUP_VALUE = "__homebase_no_task_group__";
+const NEW_TASK_GROUP_VALUE = "__homebase_new_task_group__";
+
 function dateInputValue(value?: string | Date | null) {
   return value ? String(value).slice(0, 10) : "";
 }
@@ -50,6 +53,12 @@ function dateInputValue(value?: string | Date | null) {
 function dateForDisplay(value: string | Date) {
   if (value instanceof Date) return value;
   return new Date(value.length === 10 ? `${value}T00:00:00` : value);
+}
+
+function findTaskGroupOption(value: string, taskGroupOptions: readonly string[]) {
+  const normalized = value.trim().toLocaleLowerCase();
+  if (!normalized) return null;
+  return taskGroupOptions.find((group) => group.trim().toLocaleLowerCase() === normalized) ?? null;
 }
 
 interface TaskItemProps {
@@ -67,6 +76,7 @@ interface TaskItemProps {
   onMoveUp?: () => void;
   onMoveDown?: () => void;
   parentTaskOptions?: ParentTaskOption[];
+  taskGroupOptions?: string[];
   onDragStart?: DragEventHandler<HTMLDivElement>;
   onDragOver?: DragEventHandler<HTMLDivElement>;
   onDragLeave?: DragEventHandler<HTMLDivElement>;
@@ -89,6 +99,7 @@ export function TaskItem({
   onMoveUp,
   onMoveDown,
   parentTaskOptions = [],
+  taskGroupOptions = [],
   onDragStart,
   onDragOver,
   onDragLeave,
@@ -102,6 +113,7 @@ export function TaskItem({
   const [editAssignee, setEditAssignee] = useState<string>(task.assignee || "null");
   const [editDueDate, setEditDueDate] = useState(dateInputValue(task.dueDate));
   const [editCategory, setEditCategory] = useState(task.category ?? "");
+  const [editCategoryMode, setEditCategoryMode] = useState<"existing" | "new">("existing");
   const [editParentTaskId, setEditParentTaskId] = useState<string>(
     task.parentTaskId == null ? "null" : String(task.parentTaskId)
   );
@@ -211,6 +223,9 @@ export function TaskItem({
     setEditAssignee(task.assignee || "null");
     setEditDueDate(dateInputValue(task.dueDate));
     setEditCategory(task.category ?? "");
+    setEditCategoryMode(
+      task.category?.trim() && !findTaskGroupOption(task.category, taskGroupOptions) ? "new" : "existing"
+    );
     setEditParentTaskId(task.parentTaskId == null ? "null" : String(task.parentTaskId));
     setIsEditing(true);
   };
@@ -250,6 +265,13 @@ export function TaskItem({
   };
 
   const canDrag = dragEnabled && !isEditing;
+  const matchingEditCategory = findTaskGroupOption(editCategory, taskGroupOptions);
+  const editCategorySelectValue =
+    editCategoryMode === "new"
+      ? NEW_TASK_GROUP_VALUE
+      : editCategory.trim()
+        ? matchingEditCategory ?? NEW_TASK_GROUP_VALUE
+        : NO_TASK_GROUP_VALUE;
 
   return (
     <Collapsible
@@ -458,12 +480,46 @@ export function TaskItem({
                 )}
                 <div className="space-y-2">
                   <Label>Group</Label>
-                  <Input
-                    value={editCategory}
-                    onChange={(e) => setEditCategory(e.target.value)}
-                    placeholder="Home, Errands..."
-                    className="bg-background"
-                  />
+                  <Select
+                    value={editCategorySelectValue}
+                    onValueChange={(value) => {
+                      if (value === NO_TASK_GROUP_VALUE) {
+                        setEditCategoryMode("existing");
+                        setEditCategory("");
+                        return;
+                      }
+
+                      if (value === NEW_TASK_GROUP_VALUE) {
+                        setEditCategoryMode("new");
+                        if (!editCategory.trim() || matchingEditCategory) setEditCategory("");
+                        return;
+                      }
+
+                      setEditCategoryMode("existing");
+                      setEditCategory(value);
+                    }}
+                  >
+                    <SelectTrigger className="bg-background">
+                      <SelectValue placeholder="Choose group" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={NO_TASK_GROUP_VALUE}>No group</SelectItem>
+                      {taskGroupOptions.map((group) => (
+                        <SelectItem key={group} value={group}>
+                          {group}
+                        </SelectItem>
+                      ))}
+                      <SelectItem value={NEW_TASK_GROUP_VALUE}>New group</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {editCategorySelectValue === NEW_TASK_GROUP_VALUE && (
+                    <Input
+                      value={editCategory}
+                      onChange={(e) => setEditCategory(e.target.value)}
+                      placeholder="New group name"
+                      className="bg-background"
+                    />
+                  )}
                 </div>
               </div>
               <div className="flex justify-end gap-2 pt-2">
@@ -540,6 +596,7 @@ export function TaskItem({
                           compact
                           isSubtask
                           parentTaskOptions={parentTaskOptions}
+                          taskGroupOptions={taskGroupOptions}
                         />
                       ))}
                     </div>

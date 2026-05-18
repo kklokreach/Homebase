@@ -13,6 +13,7 @@ import { TaskQuickAdd } from "@/components/task-quick-add";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   getTaskGroups,
+  getTaskGroupOptions,
   showTaskGroupHeaders,
   type GroupableTask,
 } from "@/lib/task-groups";
@@ -47,7 +48,14 @@ export default function Home() {
     { view: "today" },
     { query: { queryKey: getListTasksQueryKey({ view: "today" }) } },
   );
+  const { data: allTaskData } = useListTasks(undefined, {
+    query: { queryKey: getListTasksQueryKey() },
+  });
   const todayTasks = useMemo(() => (todayTaskData ?? []) as GroupableTask[], [todayTaskData]);
+  const taskGroupOptions = useMemo(
+    () => getTaskGroupOptions((allTaskData ?? []) as GroupableTask[]),
+    [allTaskData],
+  );
   const todayTaskGroups = useMemo(() => getTaskGroups(todayTasks), [todayTasks]);
   const showGroupHeaders = showTaskGroupHeaders(todayTaskGroups);
 
@@ -81,7 +89,7 @@ if (!snapshot) return <div className="px-4 pt-5 max-w-2xl mx-auto text-sm text-m
     <div className="flex flex-col min-h-full">
       {/* Sticky quick-add */}
       <div className="sticky top-0 z-10 bg-background/95 backdrop-blur-sm border-b border-border/40 px-4 pt-4 pb-3">
-        <TaskQuickAdd placeholder="Add a task…" />
+        <TaskQuickAdd placeholder="Add a task…" taskGroupOptions={taskGroupOptions} />
       </div>
 
       <div className="px-4 pt-5 pb-10 space-y-7 max-w-2xl mx-auto w-full">
@@ -154,7 +162,7 @@ if (!snapshot) return <div className="px-4 pt-5 max-w-2xl mx-auto text-sm text-m
                     </div>
                   )}
                   {group.tasks.map((task, i) => (
-                    <TaskItem key={task.id} task={task} index={i} compact />
+                    <TaskItem key={task.id} task={task} index={i} compact taskGroupOptions={taskGroupOptions} />
                   ))}
                 </section>
               ))}

@@ -4,6 +4,7 @@ export type GroupableTask = Task & {
   parentTaskId?: number | null;
   sortOrder?: number;
   category?: string | null;
+  subtasks?: GroupableTask[];
 };
 
 export type TaskGroup = {
@@ -43,4 +44,26 @@ export function showTaskGroupHeaders(groups: readonly TaskGroup[]) {
 
 export function orderedTaskIdsFromGroups(groups: readonly TaskGroup[]) {
   return groups.flatMap((group) => group.tasks.map((task) => task.id));
+}
+
+export function getTaskGroupOptions(tasks: readonly GroupableTask[] = []) {
+  const groups = new Map<string, string>();
+
+  function visit(task: GroupableTask) {
+    const label = task.category?.trim();
+    if (label) {
+      const key = taskGroupKey(label);
+      if (!groups.has(key)) groups.set(key, label);
+    }
+
+    for (const subtask of task.subtasks ?? []) {
+      visit(subtask);
+    }
+  }
+
+  for (const task of tasks) {
+    visit(task);
+  }
+
+  return Array.from(groups.values()).sort((a, b) => a.localeCompare(b));
 }

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { ChevronDown, Plus } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -14,23 +14,51 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
+import { getTaskGroupOptions, type GroupableTask } from "@/lib/task-groups";
+
+const NO_TASK_GROUP_VALUE = "__homebase_no_task_group__";
+const NEW_TASK_GROUP_VALUE = "__homebase_new_task_group__";
+
+function findTaskGroupOption(value: string, taskGroupOptions: readonly string[]) {
+  const normalized = value.trim().toLocaleLowerCase();
+  if (!normalized) return null;
+  return taskGroupOptions.find((group) => group.trim().toLocaleLowerCase() === normalized) ?? null;
+}
 
 interface TaskQuickAddProps {
   defaultAssignee?: "me" | "wife" | "us" | null;
   placeholder?: string;
+  taskGroupOptions?: string[];
 }
 
-export function TaskQuickAdd({ defaultAssignee = null, placeholder = "Add a new task..." }: TaskQuickAddProps) {
+export function TaskQuickAdd({
+  defaultAssignee = null,
+  placeholder = "Add a new task...",
+  taskGroupOptions: providedTaskGroupOptions,
+}: TaskQuickAddProps) {
   const [title, setTitle] = useState("");
   const [showOptions, setShowOptions] = useState(false);
   const [assignee, setAssignee] = useState<"me" | "wife" | "us" | "null">(defaultAssignee ?? "null");
   const [dueDate, setDueDate] = useState("");
   const [category, setCategory] = useState("");
+  const [categoryMode, setCategoryMode] = useState<"existing" | "new">("existing");
   const [parentTaskId, setParentTaskId] = useState<string>("null");
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const createTask = useCreateTask();
   const { data: parentTasks } = useListTasks({}, { query: { queryKey: getListTasksQueryKey() } });
+  const fallbackTaskGroupOptions = useMemo(
+    () => getTaskGroupOptions((parentTasks ?? []) as GroupableTask[]),
+    [parentTasks],
+  );
+  const taskGroupOptions = providedTaskGroupOptions ?? fallbackTaskGroupOptions;
+  const matchingCategory = findTaskGroupOption(category, taskGroupOptions);
+  const categorySelectValue =
+    categoryMode === "new"
+      ? NEW_TASK_GROUP_VALUE
+      : category.trim()
+        ? matchingCategory ?? NEW_TASK_GROUP_VALUE
+        : NO_TASK_GROUP_VALUE;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -52,6 +80,7 @@ export function TaskQuickAdd({ defaultAssignee = null, placeholder = "Add a new 
           setAssignee("null");
           setDueDate("");
           setCategory("");
+          setCategoryMode("existing");
           setParentTaskId("null");
           queryClient.invalidateQueries({ queryKey: getListTasksQueryKey() });
           queryClient.invalidateQueries({ queryKey: getGetTodaySummaryQueryKey() });
@@ -129,13 +158,46 @@ export function TaskQuickAdd({ defaultAssignee = null, placeholder = "Add a new 
 
           <div className="space-y-2">
             <Label htmlFor="task-category">Group</Label>
-            <Input
-              id="task-category"
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-              placeholder="Home, Errands..."
-              className="bg-background"
-            />
+            <Select
+              value={categorySelectValue}
+              onValueChange={(value) => {
+                if (value === NO_TASK_GROUP_VALUE) {
+                  setCategoryMode("existing");
+                  setCategory("");
+                  return;
+                }
+
+                if (value === NEW_TASK_GROUP_VALUE) {
+                  setCategoryMode("new");
+                  if (!category.trim() || matchingCategory) setCategory("");
+                  return;
+                }
+
+                setCategoryMode("existing");
+                setCategory(value);
+              }}
+            >
+              <SelectTrigger id="task-category" className="bg-background">
+                <SelectValue placeholder="Choose group" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={NO_TASK_GROUP_VALUE}>No group</SelectItem>
+                {taskGroupOptions.map((group) => (
+                  <SelectItem key={group} value={group}>
+                    {group}
+                  </SelectItem>
+                ))}
+                <SelectItem value={NEW_TASK_GROUP_VALUE}>New group</SelectItem>
+              </SelectContent>
+            </Select>
+            {categorySelectValue === NEW_TASK_GROUP_VALUE && (
+              <Input
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+                placeholder="New group name"
+                className="bg-background"
+              />
+            )}
           </div>
 
           <div className="space-y-2">

@@ -17,6 +17,7 @@ import { apiFetch } from "@/lib/api-base";
 import { cn } from "@/lib/utils";
 import {
   getTaskGroups,
+  getTaskGroupOptions,
   orderedTaskIdsFromGroups,
   showTaskGroupHeaders,
   type GroupableTask,
@@ -74,6 +75,10 @@ export default function Tasks() {
         id: task.id,
         title: task.title,
       })),
+    [allTasks],
+  );
+  const taskGroupOptions = useMemo(
+    () => getTaskGroupOptions((allTasks ?? []) as GroupableTask[]),
     [allTasks],
   );
   const taskGroups = useMemo(() => getTaskGroups(taskItems), [taskItems]);
@@ -300,7 +305,7 @@ export default function Tasks() {
           </div>
           <h1 className="text-3xl font-serif font-bold text-foreground">Tasks</h1>
         </div>
-        <TaskQuickAdd />
+        <TaskQuickAdd taskGroupOptions={taskGroupOptions} />
       </header>
 
       <Tabs
@@ -452,6 +457,7 @@ export default function Tasks() {
                       onDrop={(event) => handleTaskDrop(event, task.id, group.key)}
                       onDragEnd={clearDragState}
                       parentTaskOptions={parentTaskOptions}
+                      taskGroupOptions={taskGroupOptions}
                     />
                   ))}
                 </section>
