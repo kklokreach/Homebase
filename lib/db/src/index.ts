@@ -28,6 +28,16 @@ export async function ensureSchema() {
 
     CREATE UNIQUE INDEX IF NOT EXISTS monthly_income_year_month_unique
       ON monthly_income (year, month);
+
+    CREATE TABLE IF NOT EXISTS weekly_plans (
+      id serial PRIMARY KEY,
+      plan_date date NOT NULL,
+      body text NOT NULL DEFAULT '',
+      updated_at timestamp with time zone NOT NULL DEFAULT now()
+    );
+
+    CREATE UNIQUE INDEX IF NOT EXISTS weekly_plans_plan_date_unique
+      ON weekly_plans (plan_date);
   `);
 }
 

@@ -1,163 +1,274 @@
-import { useEffect, useMemo, useState } from "react";
-import { format, isToday, isTomorrow, parseISO } from "date-fns";
-import { CalendarDays, Clock, MapPin, User, Users } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { addDays, addWeeks, format, isSameWeek, isToday, startOfWeek, subWeeks } from "date-fns";
+import { CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Textarea } from "@/components/ui/textarea";
+import { useToast } from "@/hooks/use-toast";
 import { apiFetch } from "@/lib/api-base";
+import { cn } from "@/lib/utils";
 
-type Assignee = "me" | "wife" | "us";
-
-type CalEvent = {
-  id: string;
-  title: string;
-  start: string;
-  end: string;
-  location: string | null;
-  assignee: Assignee;
+type WeeklyPlanDay = {
+  date: string;
+  body: string;
+  updatedAt: string | null;
 };
 
-function assigneeLabel(value: Assignee): string {
-  if (value === "wife") return "Lauren";
-  if (value === "me") return "Patrick";
-  return "Both";
+const WEEK_STARTS_ON = 1;
+const AUTOSAVE_DELAY_MS = 700;
+
+function dateKey(date: Date) {
+  return format(date, "yyyy-MM-dd");
 }
 
-function dayLabel(date: Date): string {
-  if (isToday(date)) return "Today";
-  if (isTomorrow(date)) return "Tomorrow";
-  return format(date, "EEEE, MMM d");
+function startOfPlanWeek(date: Date) {
+  return startOfWeek(date, { weekStartsOn: WEEK_STARTS_ON });
 }
 
-export default function Calendar() {
-  const [events, setEvents] = useState<CalEvent[]>([]);
+function emptyWeekEntries(weekStartKey: string) {
+  const entries: Record<string, string> = {};
+  const [year, month, day] = weekStartKey.split("-").map(Number);
+  const weekStart = new Date(year, month - 1, day);
+
+  for (let index = 0; index < 7; index += 1) {
+    entries[dateKey(addDays(weekStart, index))] = "";
+  }
+
+  return entries;
+}
+
+async function api<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await apiFetch(`/api${path}`, {
+    ...init,
+    headers: {
+      "Content-Type": "application/json",
+      ...(init?.headers ?? {}),
+    },
+  });
+
+  if (!res.ok) {
+    let message = `HTTP ${res.status}`;
+    try {
+      const body = (await res.json()) as { error?: string };
+      if (body.error) message = body.error;
+    } catch {
+      // Use the status code if the API did not return a JSON error body.
+    }
+    throw new Error(message);
+  }
+
+  return (await res.json()) as T;
+}
+
+function statusLabel(date: string, entries: Record<string, string>, savedEntries: Record<string, string>, saving: Set<string>) {
+  if (saving.has(date)) return "Saving";
+  return entries[date] === savedEntries[date] ? "Saved" : "Draft";
+}
+
+export default function WeeklyPlanner() {
+  const [viewDate, setViewDate] = useState(() => new Date());
+  const [entries, setEntries] = useState<Record<string, string>>({});
+  const [savedEntries, setSavedEntries] = useState<Record<string, string>>({});
+  const [savingDates, setSavingDates] = useState<Set<string>>(() => new Set());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { toast } = useToast();
+
+  const weekStart = useMemo(() => startOfPlanWeek(viewDate), [viewDate]);
+  const weekStartKey = dateKey(weekStart);
+  const weekDays = useMemo(() => Array.from({ length: 7 }, (_, index) => addDays(weekStart, index)), [weekStart]);
+  const weekEnd = weekDays[6] ?? weekStart;
+  const weekLabel = `${format(weekStart, "MMM d")} - ${format(weekEnd, "MMM d, yyyy")}`;
+  const isCurrentWeek = isSameWeek(viewDate, new Date(), { weekStartsOn: WEEK_STARTS_ON });
 
   useEffect(() => {
     let cancelled = false;
 
-    async function load() {
+    async function loadWeek() {
       try {
         setLoading(true);
         setError(null);
+        setSavingDates(new Set());
 
-        const res = await apiFetch("/api/calendar/events");
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await api<WeeklyPlanDay[]>(`/weekly-plans?weekStart=${weekStartKey}`);
+        const nextEntries = emptyWeekEntries(weekStartKey);
 
-        const data = (await res.json()) as CalEvent[];
-        if (!cancelled) setEvents(data);
+        for (const day of data) {
+          nextEntries[day.date] = day.body;
+        }
+
+        if (!cancelled) {
+          setEntries(nextEntries);
+          setSavedEntries(nextEntries);
+        }
       } catch (err) {
         if (!cancelled) {
-          setError(err instanceof Error ? err.message : "Failed to load calendar");
+          setError(err instanceof Error ? err.message : "Failed to load weekly plan");
         }
       } finally {
         if (!cancelled) setLoading(false);
       }
     }
 
-    load();
+    loadWeek();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [weekStartKey]);
 
-  const grouped = useMemo(() => {
-    const map = new Map<string, CalEvent[]>();
+  const saveDay = useCallback(
+    async (date: string, body: string) => {
+      setSavingDates((current) => new Set(current).add(date));
 
-    for (const ev of events) {
-      const key = ev.start.slice(0, 10);
-      if (!map.has(key)) map.set(key, []);
-      map.get(key)!.push(ev);
+      try {
+        const saved = await api<WeeklyPlanDay>(`/weekly-plans/${date}`, {
+          method: "PUT",
+          body: JSON.stringify({ body }),
+        });
+
+        setSavedEntries((current) => ({ ...current, [date]: saved.body }));
+      } catch (err) {
+        toast({
+          title: "Failed to save plan",
+          description: err instanceof Error ? err.message : undefined,
+          variant: "destructive",
+        });
+      } finally {
+        setSavingDates((current) => {
+          const next = new Set(current);
+          next.delete(date);
+          return next;
+        });
+      }
+    },
+    [toast],
+  );
+
+  const saveDirtyEntries = useCallback(() => {
+    for (const day of weekDays) {
+      const key = dateKey(day);
+      const body = entries[key] ?? "";
+      if (body !== (savedEntries[key] ?? "")) {
+        void saveDay(key, body);
+      }
     }
+  }, [entries, saveDay, savedEntries, weekDays]);
 
-    return Array.from(map.entries())
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([key, items]) => ({
-        date: parseISO(key),
-        items: items.sort((a, b) => a.start.localeCompare(b.start)),
-      }));
-  }, [events]);
+  useEffect(() => {
+    if (loading) return;
+
+    const dirty = weekDays
+      .map((day) => dateKey(day))
+      .filter((key) => (entries[key] ?? "") !== (savedEntries[key] ?? ""));
+
+    if (dirty.length === 0) return;
+
+    const timer = window.setTimeout(() => {
+      for (const key of dirty) {
+        void saveDay(key, entries[key] ?? "");
+      }
+    }, AUTOSAVE_DELAY_MS);
+
+    return () => window.clearTimeout(timer);
+  }, [entries, loading, saveDay, savedEntries, weekDays]);
+
+  function updateEntry(date: string, body: string) {
+    setEntries((current) => ({ ...current, [date]: body }));
+  }
+
+  function goToWeek(date: Date) {
+    saveDirtyEntries();
+    setViewDate(date);
+  }
 
   return (
-    <div className="space-y-6">
-      <div className="rounded-2xl border bg-card p-4 shadow-sm">
+    <div className="p-6 md:p-10 space-y-6 animate-in fade-in duration-500">
+      <header className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex items-center gap-3">
-          <CalendarDays className="h-5 w-5" />
+          <div className="rounded-lg bg-primary/10 p-2.5 text-primary">
+            <CalendarDays className="h-6 w-6" />
+          </div>
           <div>
-            <h1 className="text-2xl font-semibold">Calendar</h1>
-            <p className="text-sm text-muted-foreground">
-              Google Calendar (read-only)
-            </p>
+            <h1 className="text-3xl font-serif font-bold text-foreground">Weekly Plan</h1>
+            <p className="text-sm text-muted-foreground">{weekLabel}</p>
           </div>
         </div>
-      </div>
 
-      {loading && (
-        <div className="rounded-2xl border bg-card p-4 text-sm text-muted-foreground">
-          Loading calendar…
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="outline" size="icon" onClick={() => goToWeek(subWeeks(viewDate, 1))} aria-label="Previous week">
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          <Button variant="outline" onClick={() => goToWeek(new Date())} disabled={isCurrentWeek}>
+            This Week
+          </Button>
+          <Button variant="outline" size="icon" onClick={() => goToWeek(addWeeks(viewDate, 1))} aria-label="Next week">
+            <ChevronRight className="h-4 w-4" />
+          </Button>
         </div>
-      )}
+      </header>
 
       {error && (
-        <div className="rounded-2xl border bg-card p-4 text-sm text-red-600">
+        <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
           {error}
         </div>
       )}
 
-      {!loading && !error && grouped.length === 0 && (
-        <div className="rounded-2xl border bg-card p-4 text-sm text-muted-foreground">
-          No upcoming events found.
+      {loading ? (
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          {Array.from({ length: 7 }, (_, index) => (
+            <Skeleton key={index} className="h-72 rounded-lg" />
+          ))}
+        </div>
+      ) : (
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          {weekDays.map((day) => {
+            const key = dateKey(day);
+            const label = statusLabel(key, entries, savedEntries, savingDates);
+
+            return (
+              <section
+                key={key}
+                className={cn(
+                  "flex min-h-72 flex-col rounded-lg border bg-card p-3 shadow-sm",
+                  isToday(day) && "border-primary/60 ring-1 ring-primary/30",
+                )}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <h2 className="font-semibold text-foreground">{isToday(day) ? "Today" : format(day, "EEEE")}</h2>
+                    <p className="text-sm text-muted-foreground">{format(day, "MMM d")}</p>
+                  </div>
+                  <span
+                    className={cn(
+                      "rounded-full px-2 py-1 text-xs font-medium",
+                      label === "Draft"
+                        ? "bg-muted text-muted-foreground"
+                        : label === "Saving"
+                          ? "bg-primary/10 text-primary"
+                          : "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+                    )}
+                  >
+                    {label}
+                  </span>
+                </div>
+
+                <Textarea
+                  value={entries[key] ?? ""}
+                  onChange={(event) => updateEntry(key, event.target.value)}
+                  onBlur={() => {
+                    const body = entries[key] ?? "";
+                    if (body !== (savedEntries[key] ?? "")) {
+                      void saveDay(key, body);
+                    }
+                  }}
+                  placeholder="Write in the day"
+                  className="mt-3 min-h-56 flex-1 resize-y border-border/70 bg-background/70 text-sm leading-6"
+                />
+              </section>
+            );
+          })}
         </div>
       )}
-
-      {!loading &&
-        !error &&
-        grouped.map(({ date, items }) => (
-          <section key={date.toISOString()} className="space-y-3">
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold">{dayLabel(date)}</h2>
-              <span className="text-sm text-muted-foreground">
-                {items.length} event{items.length === 1 ? "" : "s"}
-              </span>
-            </div>
-
-            <div className="space-y-3">
-              {items.map((event) => (
-                <div
-                  key={event.id}
-                  className="rounded-2xl border bg-card p-4 shadow-sm"
-                >
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <div className="font-medium">{event.title}</div>
-                      <div className="mt-2 flex flex-wrap gap-3 text-sm text-muted-foreground">
-                        <span className="inline-flex items-center gap-1">
-                          <Clock className="h-4 w-4" />
-                          {format(new Date(event.start), "h:mm a")} –{" "}
-                          {format(new Date(event.end), "h:mm a")}
-                        </span>
-
-                        {event.location && (
-                          <span className="inline-flex items-center gap-1">
-                            <MapPin className="h-4 w-4" />
-                            {event.location}
-                          </span>
-                        )}
-
-                        <span className="inline-flex items-center gap-1">
-                          {event.assignee === "us" ? (
-                            <Users className="h-4 w-4" />
-                          ) : (
-                            <User className="h-4 w-4" />
-                          )}
-                          {assigneeLabel(event.assignee)}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </section>
-        ))}
     </div>
   );
 }

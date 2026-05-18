@@ -8,6 +8,7 @@ import calendarRouter from "./calendar";
 import reservesRouter from "./reserves";
 import reviewsRouter from "./reviews";
 import notesRouter from "./notes";
+import weeklyPlansRouter from "./weekly-plans";
 
 const router: IRouter = Router();
 
@@ -20,5 +21,6 @@ router.use(calendarRouter);
 router.use(reservesRouter);
 router.use(reviewsRouter);
 router.use(notesRouter);
+router.use(weeklyPlansRouter);
 
 export default router;

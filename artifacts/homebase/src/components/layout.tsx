@@ -8,7 +8,7 @@ const NAV_ITEMS = [
   { path: "/tasks", label: "Tasks", icon: CheckSquare },
   { path: "/finances", label: "Finances", icon: PieChart },
   { path: "/notes", label: "Notes", icon: FileText },
-  { path: "/calendar", label: "Calendar", icon: CalendarDays },
+  { path: "/calendar", label: "Planner", icon: CalendarDays },
   { path: "/settings", label: "Settings", icon: Settings },
 ];
 
