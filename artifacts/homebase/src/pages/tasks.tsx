@@ -11,7 +11,7 @@ import { TaskQuickAdd } from "@/components/task-quick-add";
 import { TaskItem } from "@/components/task-item";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
-import { ArrowUpDown, CheckSquare, GripVertical } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, CheckSquare, GripVertical } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiFetch } from "@/lib/api-base";
 import { cn } from "@/lib/utils";
@@ -181,6 +181,24 @@ export default function Tasks() {
     await persistTaskOrder(reorderedGroups, { type: "group", groupKey: groupKeyValue });
   }
 
+  async function moveGroup(groupKeyValue: string, direction: "up" | "down") {
+    if (reorderBusy) return;
+
+    const index = taskGroups.findIndex((group) => group.key === groupKeyValue);
+    const nextIndex = direction === "up" ? index - 1 : index + 1;
+    if (index < 0 || nextIndex < 0 || nextIndex >= taskGroups.length) return;
+
+    const reorderedGroups = cloneTaskGroups(taskGroups);
+    const currentGroup = reorderedGroups[index];
+    const nextGroup = reorderedGroups[nextIndex];
+    if (!currentGroup || !nextGroup) return;
+
+    reorderedGroups[index] = nextGroup;
+    reorderedGroups[nextIndex] = currentGroup;
+
+    await persistTaskOrder(reorderedGroups, { type: "group", groupKey: groupKeyValue });
+  }
+
   function startTaskDrag(event: DragEvent<HTMLDivElement>, taskId: number, sourceGroupKey: string) {
     if (reorderBusy) {
       event.preventDefault();
@@ -324,7 +342,7 @@ export default function Tasks() {
                   </Button>
                 </div>
               )}
-              {taskGroups.map((group) => (
+              {taskGroups.map((group, groupIndex) => (
                 <section
                   key={group.key}
                   className={cn(
@@ -358,14 +376,46 @@ export default function Tasks() {
                         </div>
                       </div>
                       {reorderMode && taskGroups.length > 1 && (
-                        <div
-                          className={cn(
-                            "flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground",
-                            reorderBusy ? "opacity-40" : "hover:text-foreground"
-                          )}
-                          aria-label={`Drag ${group.label} group`}
-                        >
-                          <GripVertical className="h-4 w-4" />
+                        <div className="flex shrink-0 items-center gap-1">
+                          <div
+                            className={cn(
+                              "flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground",
+                              reorderBusy ? "opacity-40" : "hover:text-foreground"
+                            )}
+                            aria-label={`Drag ${group.label} group`}
+                          >
+                            <GripVertical className="h-4 w-4" />
+                          </div>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                            onMouseDown={(event) => event.stopPropagation()}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              void moveGroup(group.key, "up");
+                            }}
+                            disabled={groupIndex === 0 || reorderBusy}
+                            aria-label={`Move ${group.label} group up`}
+                          >
+                            <ArrowUp className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                            onMouseDown={(event) => event.stopPropagation()}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              void moveGroup(group.key, "down");
+                            }}
+                            disabled={groupIndex === taskGroups.length - 1 || reorderBusy}
+                            aria-label={`Move ${group.label} group down`}
+                          >
+                            <ArrowDown className="h-4 w-4" />
+                          </Button>
                         </div>
                       )}
                     </div>
