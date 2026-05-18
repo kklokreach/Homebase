@@ -64,6 +64,8 @@ export default function Tasks() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const taskListParams = view === "all" ? undefined : { view };
+  const quickAddDefaultAssignee: "me" | "wife" | "us" | null =
+    view === "mine" ? "me" : view === "wife" ? "wife" : view === "shared" ? "us" : null;
   
   const { data: tasks, isLoading } = useListTasks(
     taskListParams,
@@ -309,7 +311,7 @@ export default function Tasks() {
           </div>
           <h1 className="text-3xl font-serif font-bold text-foreground">Tasks</h1>
         </div>
-        <TaskQuickAdd taskGroupOptions={taskGroupOptions} />
+        <TaskQuickAdd defaultAssignee={quickAddDefaultAssignee} taskGroupOptions={taskGroupOptions} />
       </header>
 
       <Tabs

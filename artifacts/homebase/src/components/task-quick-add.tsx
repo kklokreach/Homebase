@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ChevronDown, Plus } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -60,6 +60,10 @@ export function TaskQuickAdd({
         ? matchingCategory ?? NEW_TASK_GROUP_VALUE
         : NO_TASK_GROUP_VALUE;
 
+  useEffect(() => {
+    setAssignee(defaultAssignee ?? "null");
+  }, [defaultAssignee]);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim() || createTask.isPending) return;
@@ -77,7 +81,7 @@ export function TaskQuickAdd({
       {
         onSuccess: () => {
           setTitle("");
-          setAssignee("null");
+          setAssignee(defaultAssignee ?? "null");
           setDueDate("");
           setCategory("");
           setCategoryMode("existing");
