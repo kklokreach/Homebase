@@ -432,6 +432,8 @@ router.put("/tasks/:id", async (req, res): Promise<void> => {
 
   const updates: Record<string, unknown> = {};
   const d = parsed.data;
+  const parentChanged =
+    "parentTaskId" in d && (d.parentTaskId ?? null) !== (existing.parentTaskId ?? null);
   if (d.title !== undefined) updates.title = d.title;
   if ("assignee" in d) updates.assignee = d.assignee ?? null;
   if ("dueDate" in d) updates.dueDate = d.dueDate ? d.dueDate.toISOString().slice(0, 10) : null;
@@ -440,6 +442,13 @@ router.put("/tasks/:id", async (req, res): Promise<void> => {
   if ("category" in d) updates.category = d.category ?? null;
   if ("parentTaskId" in d) updates.parentTaskId = d.parentTaskId ?? null;
   if (d.sortOrder !== undefined) updates.sortOrder = d.sortOrder;
+  if (parentChanged && d.sortOrder === undefined) {
+    const siblings = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(tasksTable)
+      .where(nextParentTaskId != null ? eq(tasksTable.parentTaskId, nextParentTaskId) : isNull(tasksTable.parentTaskId));
+    updates.sortOrder = Number(siblings[0]?.count ?? 0);
+  }
   if (d.completed !== undefined) {
     updates.completed = d.completed;
     updates.completedAt = d.completed ? new Date() : null;

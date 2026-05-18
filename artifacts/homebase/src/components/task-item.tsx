@@ -38,6 +38,11 @@ type TaskWithSubtasks = Task & {
   subtasks?: TaskWithSubtasks[];
 };
 
+type ParentTaskOption = {
+  id: number;
+  title: string;
+};
+
 function dateInputValue(value?: string | Date | null) {
   return value ? String(value).slice(0, 10) : "";
 }
@@ -61,6 +66,7 @@ interface TaskItemProps {
   canMoveDown?: boolean;
   onMoveUp?: () => void;
   onMoveDown?: () => void;
+  parentTaskOptions?: ParentTaskOption[];
   onDragStart?: DragEventHandler<HTMLDivElement>;
   onDragOver?: DragEventHandler<HTMLDivElement>;
   onDragLeave?: DragEventHandler<HTMLDivElement>;
@@ -82,6 +88,7 @@ export function TaskItem({
   canMoveDown = false,
   onMoveUp,
   onMoveDown,
+  parentTaskOptions = [],
   onDragStart,
   onDragOver,
   onDragLeave,
@@ -95,6 +102,9 @@ export function TaskItem({
   const [editAssignee, setEditAssignee] = useState<string>(task.assignee || "null");
   const [editDueDate, setEditDueDate] = useState(dateInputValue(task.dueDate));
   const [editCategory, setEditCategory] = useState(task.category ?? "");
+  const [editParentTaskId, setEditParentTaskId] = useState<string>(
+    task.parentTaskId == null ? "null" : String(task.parentTaskId)
+  );
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
@@ -142,6 +152,9 @@ export function TaskItem({
           assignee: editAssignee === "null" ? null : (editAssignee as any),
           dueDate: editDueDate || null,
           category: editCategory.trim() || null,
+          ...(isSubtask
+            ? { parentTaskId: editParentTaskId === "null" ? null : Number(editParentTaskId) }
+            : {}),
         } as any,
       },
       {
@@ -198,6 +211,7 @@ export function TaskItem({
     setEditAssignee(task.assignee || "null");
     setEditDueDate(dateInputValue(task.dueDate));
     setEditCategory(task.category ?? "");
+    setEditParentTaskId(task.parentTaskId == null ? "null" : String(task.parentTaskId));
     setIsEditing(true);
   };
 
@@ -398,7 +412,7 @@ export function TaskItem({
                   className="bg-background"
                 />
               </div>
-              <div className="grid gap-3 sm:grid-cols-3">
+              <div className={cn("grid gap-3", isSubtask ? "sm:grid-cols-2 lg:grid-cols-4" : "sm:grid-cols-3")}>
                 <div className="space-y-2">
                   <Label>Assignee</Label>
                   <Select value={editAssignee} onValueChange={setEditAssignee}>
@@ -422,6 +436,26 @@ export function TaskItem({
                     className="bg-background"
                   />
                 </div>
+                {isSubtask && (
+                  <div className="space-y-2">
+                    <Label>Parent Task</Label>
+                    <Select value={editParentTaskId} onValueChange={setEditParentTaskId}>
+                      <SelectTrigger className="bg-background">
+                        <SelectValue placeholder="Choose parent task" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="null">No parent</SelectItem>
+                        {parentTaskOptions
+                          .filter((parentTask) => parentTask.id !== task.id)
+                          .map((parentTask) => (
+                            <SelectItem key={parentTask.id} value={String(parentTask.id)}>
+                              {parentTask.title.trim() || "Untitled task"}
+                            </SelectItem>
+                          ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
                 <div className="space-y-2">
                   <Label>Group</Label>
                   <Input
@@ -505,6 +539,7 @@ export function TaskItem({
                           index={subtaskIndex}
                           compact
                           isSubtask
+                          parentTaskOptions={parentTaskOptions}
                         />
                       ))}
                     </div>

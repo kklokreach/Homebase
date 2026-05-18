@@ -64,7 +64,18 @@ export default function Tasks() {
     { view },
     { query: { queryKey: getListTasksQueryKey({ view }) } }
   );
+  const { data: allTasks } = useListTasks(undefined, {
+    query: { queryKey: getListTasksQueryKey() },
+  });
   const taskItems = useMemo(() => (tasks ?? []) as GroupableTask[], [tasks]);
+  const parentTaskOptions = useMemo(
+    () =>
+      ((allTasks ?? []) as GroupableTask[]).map((task) => ({
+        id: task.id,
+        title: task.title,
+      })),
+    [allTasks],
+  );
   const taskGroups = useMemo(() => getTaskGroups(taskItems), [taskItems]);
   const showGroupHeaders = showTaskGroupHeaders(taskGroups);
   const reorderBusy = reorderingTaskId !== null || reorderingGroupKey !== null;
@@ -440,6 +451,7 @@ export default function Tasks() {
                       onDragLeave={(event) => handleTaskDragLeave(event, task.id, group.key)}
                       onDrop={(event) => handleTaskDrop(event, task.id, group.key)}
                       onDragEnd={clearDragState}
+                      parentTaskOptions={parentTaskOptions}
                     />
                   ))}
                 </section>
