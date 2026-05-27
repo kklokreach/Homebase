@@ -1,11 +1,22 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { addDays, addWeeks, format, isSameWeek, isToday, startOfWeek, subWeeks } from "date-fns";
-import { CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
+import { CalendarDays, ChevronLeft, ChevronRight, Plus } from "lucide-react";
+import {
+  getGetHomeSnapshotQueryKey,
+  getGetTodaySummaryQueryKey,
+  getListTasksQueryKey,
+  useCreateTask,
+  useListTasks,
+} from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
+import { TaskItem } from "@/components/task-item";
 import { useToast } from "@/hooks/use-toast";
 import { apiFetch } from "@/lib/api-base";
+import { getTaskGroupOptions, type GroupableTask } from "@/lib/task-groups";
 import { cn } from "@/lib/utils";
 
 type WeeklyPlanDay = {
@@ -69,10 +80,17 @@ export default function WeeklyPlanner() {
   const [viewDate, setViewDate] = useState(() => new Date());
   const [entries, setEntries] = useState<Record<string, string>>({});
   const [savedEntries, setSavedEntries] = useState<Record<string, string>>({});
+  const [newTaskTitles, setNewTaskTitles] = useState<Record<string, string>>({});
+  const [creatingTaskDate, setCreatingTaskDate] = useState<string | null>(null);
   const [savingDates, setSavingDates] = useState<Set<string>>(() => new Set());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
   const { toast } = useToast();
+  const createTask = useCreateTask();
+  const { data: taskData, isLoading: tasksLoading } = useListTasks(undefined, {
+    query: { queryKey: getListTasksQueryKey() },
+  });
 
   const weekStart = useMemo(() => startOfPlanWeek(viewDate), [viewDate]);
   const weekStartKey = dateKey(weekStart);
@@ -80,6 +98,27 @@ export default function WeeklyPlanner() {
   const weekEnd = weekDays[6] ?? weekStart;
   const weekLabel = `${format(weekStart, "MMM d")} - ${format(weekEnd, "MMM d, yyyy")}`;
   const isCurrentWeek = isSameWeek(viewDate, new Date(), { weekStartsOn: WEEK_STARTS_ON });
+  const allTasks = useMemo(() => (taskData ?? []) as GroupableTask[], [taskData]);
+  const parentTaskOptions = useMemo(
+    () => allTasks.map((task) => ({ id: task.id, title: task.title })),
+    [allTasks],
+  );
+  const taskGroupOptions = useMemo(() => getTaskGroupOptions(allTasks), [allTasks]);
+  const tasksByDate = useMemo(() => {
+    const grouped = new Map<string, GroupableTask[]>();
+
+    for (const day of weekDays) {
+      grouped.set(dateKey(day), []);
+    }
+
+    for (const task of allTasks) {
+      if (!task.dueDate) continue;
+      const key = String(task.dueDate).slice(0, 10);
+      grouped.get(key)?.push(task);
+    }
+
+    return grouped;
+  }, [allTasks, weekDays]);
 
   useEffect(() => {
     let cancelled = false;
@@ -176,6 +215,48 @@ export default function WeeklyPlanner() {
     setEntries((current) => ({ ...current, [date]: body }));
   }
 
+  function updateNewTaskTitle(date: string, title: string) {
+    setNewTaskTitles((current) => ({ ...current, [date]: title }));
+  }
+
+  function refreshTaskQueries() {
+    queryClient.invalidateQueries({ queryKey: getListTasksQueryKey() });
+    queryClient.invalidateQueries({ queryKey: getGetTodaySummaryQueryKey() });
+    queryClient.invalidateQueries({ queryKey: getGetHomeSnapshotQueryKey() });
+  }
+
+  function createDatedTask(date: string, event: React.FormEvent) {
+    event.preventDefault();
+
+    const title = (newTaskTitles[date] ?? "").trim();
+    if (!title || createTask.isPending) return;
+
+    setCreatingTaskDate(date);
+    createTask.mutate(
+      {
+        data: {
+          title,
+          dueDate: date,
+          assignee: null,
+          category: null,
+          parentTaskId: null,
+        } as any,
+      },
+      {
+        onSuccess: () => {
+          setNewTaskTitles((current) => ({ ...current, [date]: "" }));
+          refreshTaskQueries();
+        },
+        onError: () => {
+          toast({ title: "Failed to add task", variant: "destructive" });
+        },
+        onSettled: () => {
+          setCreatingTaskDate(null);
+        },
+      },
+    );
+  }
+
   function goToWeek(date: Date) {
     saveDirtyEntries();
     setViewDate(date);
@@ -216,7 +297,7 @@ export default function WeeklyPlanner() {
       {loading ? (
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           {Array.from({ length: 7 }, (_, index) => (
-            <Skeleton key={index} className="h-72 rounded-lg" />
+            <Skeleton key={index} className="h-96 rounded-lg" />
           ))}
         </div>
       ) : (
@@ -224,12 +305,15 @@ export default function WeeklyPlanner() {
           {weekDays.map((day) => {
             const key = dateKey(day);
             const label = statusLabel(key, entries, savedEntries, savingDates);
+            const dayTasks = tasksByDate.get(key) ?? [];
+            const taskTitle = newTaskTitles[key] ?? "";
+            const isCreatingThisDay = createTask.isPending && creatingTaskDate === key;
 
             return (
               <section
                 key={key}
                 className={cn(
-                  "flex min-h-72 flex-col rounded-lg border bg-card p-3 shadow-sm",
+                  "flex min-h-96 flex-col rounded-lg border bg-card p-3 shadow-sm",
                   isToday(day) && "border-primary/60 ring-1 ring-primary/30",
                 )}
               >
@@ -252,18 +336,73 @@ export default function WeeklyPlanner() {
                   </span>
                 </div>
 
-                <Textarea
-                  value={entries[key] ?? ""}
-                  onChange={(event) => updateEntry(key, event.target.value)}
-                  onBlur={() => {
-                    const body = entries[key] ?? "";
-                    if (body !== (savedEntries[key] ?? "")) {
-                      void saveDay(key, body);
-                    }
-                  }}
-                  placeholder="Write in the day"
-                  className="mt-3 min-h-56 flex-1 resize-y border-border/70 bg-background/70 text-sm leading-6"
-                />
+                <div className="mt-3 space-y-2">
+                  <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Notes</div>
+                  <Textarea
+                    value={entries[key] ?? ""}
+                    onChange={(event) => updateEntry(key, event.target.value)}
+                    onBlur={() => {
+                      const body = entries[key] ?? "";
+                      if (body !== (savedEntries[key] ?? "")) {
+                        void saveDay(key, body);
+                      }
+                    }}
+                    placeholder="Write in the day"
+                    className="min-h-36 resize-y border-border/70 bg-background/70 text-sm leading-6"
+                  />
+                </div>
+
+                <div className="mt-4 flex-1 border-t border-border/60 pt-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Tasks</div>
+                    <span className="text-xs text-muted-foreground">
+                      {dayTasks.length} task{dayTasks.length === 1 ? "" : "s"}
+                    </span>
+                  </div>
+
+                  <form className="mt-2 flex items-center gap-2" onSubmit={(event) => createDatedTask(key, event)}>
+                    <Input
+                      value={taskTitle}
+                      onChange={(event) => updateNewTaskTitle(key, event.target.value)}
+                      placeholder="Add task"
+                      className="h-9 bg-background text-sm"
+                      disabled={createTask.isPending}
+                    />
+                    <Button
+                      type="submit"
+                      size="icon"
+                      className="h-9 w-9 shrink-0"
+                      disabled={!taskTitle.trim() || createTask.isPending}
+                      aria-label={`Add task for ${format(day, "MMMM d")}`}
+                    >
+                      <Plus className={cn("h-4 w-4", isCreatingThisDay && "animate-pulse")} />
+                    </Button>
+                  </form>
+
+                  <div className="mt-3 space-y-2">
+                    {tasksLoading ? (
+                      <>
+                        <Skeleton className="h-10 rounded-xl" />
+                        <Skeleton className="h-10 rounded-xl" />
+                      </>
+                    ) : dayTasks.length > 0 ? (
+                      dayTasks.map((task, index) => (
+                        <TaskItem
+                          key={task.id}
+                          task={task}
+                          index={index}
+                          compact
+                          parentTaskOptions={parentTaskOptions}
+                          taskGroupOptions={taskGroupOptions}
+                        />
+                      ))
+                    ) : (
+                      <p className="rounded-lg border border-dashed border-border/60 px-3 py-2 text-xs text-muted-foreground">
+                        No dated tasks.
+                      </p>
+                    )}
+                  </div>
+                </div>
               </section>
             );
           })}
