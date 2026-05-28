@@ -77,6 +77,8 @@ interface TaskItemProps {
   onMoveDown?: () => void;
   parentTaskOptions?: ParentTaskOption[];
   taskGroupOptions?: string[];
+  wrapTitle?: boolean;
+  hideDueDate?: boolean;
   onDragStart?: DragEventHandler<HTMLDivElement>;
   onDragOver?: DragEventHandler<HTMLDivElement>;
   onDragLeave?: DragEventHandler<HTMLDivElement>;
@@ -100,6 +102,8 @@ export function TaskItem({
   onMoveDown,
   parentTaskOptions = [],
   taskGroupOptions = [],
+  wrapTitle = false,
+  hideDueDate = false,
   onDragStart,
   onDragOver,
   onDragLeave,
@@ -317,18 +321,19 @@ export function TaskItem({
         <CollapsibleTrigger asChild>
           <div className="flex-1 cursor-pointer select-none min-w-0">
             <div className={cn(
-              "transition-all duration-300 truncate",
+              "transition-all duration-300",
+              wrapTitle ? "whitespace-normal break-words" : "truncate",
               compact ? "text-sm font-medium" : "text-base font-medium",
               task.completed ? "line-through text-muted-foreground" : "text-foreground"
             )}>
               {task.title}
             </div>
             
-            {!compact && ((task.assignee || task.dueDate || task.category) || hasSubtasks) && !isOpen && (
+            {!compact && ((task.assignee || (!hideDueDate && task.dueDate) || task.category) || hasSubtasks) && !isOpen && (
               <div className="flex flex-wrap items-center gap-2 mt-1.5 opacity-80">
                 {getAssigneeBadge()}
                 {categoryBadge}
-                {task.dueDate && (
+                {!hideDueDate && task.dueDate && (
                   <div className="flex items-center text-xs text-muted-foreground">
                     <Clock className="w-3 h-3 mr-1" />
                     {format(dateForDisplay(task.dueDate), "MMM d")}
@@ -386,7 +391,7 @@ export function TaskItem({
                 {subtaskSummary.completed}/{subtaskSummary.total}
               </span>
             )}
-            {task.dueDate && (
+            {!hideDueDate && task.dueDate && (
               <span className="text-xs text-muted-foreground tabular-nums">
                 {format(dateForDisplay(task.dueDate), "MMM d")}
               </span>
@@ -396,7 +401,7 @@ export function TaskItem({
                 {assigneeLabel[task.assignee] || task.assignee}
               </span>
             )}
-            {(hasSubtasks || task.notes || task.dueDate || task.assignee || task.category) && (
+            {(hasSubtasks || task.notes || (!hideDueDate && task.dueDate) || task.assignee || task.category) && (
               <ChevronDown className={cn("w-4 h-4 text-muted-foreground transition-transform", isOpen && "rotate-180")} />
             )}
           </div>

@@ -263,7 +263,7 @@ export default function WeeklyPlanner() {
   }
 
   return (
-    <div className="p-6 md:p-10 space-y-6 animate-in fade-in duration-500">
+    <div className="mx-auto max-w-6xl p-4 md:p-8 lg:p-10 space-y-6 animate-in fade-in duration-500">
       <header className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex items-center gap-3">
           <div className="rounded-lg bg-primary/10 p-2.5 text-primary">
@@ -295,13 +295,13 @@ export default function WeeklyPlanner() {
       )}
 
       {loading ? (
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <div className="space-y-4">
           {Array.from({ length: 7 }, (_, index) => (
-            <Skeleton key={index} className="h-96 rounded-lg" />
+            <Skeleton key={index} className="h-64 rounded-lg" />
           ))}
         </div>
       ) : (
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <div className="space-y-4">
           {weekDays.map((day) => {
             const key = dateKey(day);
             const label = statusLabel(key, entries, savedEntries, savingDates);
@@ -313,14 +313,14 @@ export default function WeeklyPlanner() {
               <section
                 key={key}
                 className={cn(
-                  "flex min-h-96 flex-col rounded-lg border bg-card p-3 shadow-sm",
+                  "rounded-lg border bg-card p-4 shadow-sm",
                   isToday(day) && "border-primary/60 ring-1 ring-primary/30",
                 )}
               >
-                <div className="flex items-start justify-between gap-3">
+                <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
-                    <h2 className="font-semibold text-foreground">{isToday(day) ? "Today" : format(day, "EEEE")}</h2>
-                    <p className="text-sm text-muted-foreground">{format(day, "MMM d")}</p>
+                    <h2 className="text-lg font-semibold text-foreground">{isToday(day) ? "Today" : format(day, "EEEE")}</h2>
+                    <p className="text-sm text-muted-foreground">{format(day, "MMM d, yyyy")}</p>
                   </div>
                   <span
                     className={cn(
@@ -336,71 +336,75 @@ export default function WeeklyPlanner() {
                   </span>
                 </div>
 
-                <div className="mt-3 space-y-2">
-                  <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Notes</div>
-                  <Textarea
-                    value={entries[key] ?? ""}
-                    onChange={(event) => updateEntry(key, event.target.value)}
-                    onBlur={() => {
-                      const body = entries[key] ?? "";
-                      if (body !== (savedEntries[key] ?? "")) {
-                        void saveDay(key, body);
-                      }
-                    }}
-                    placeholder="Write in the day"
-                    className="min-h-36 resize-y border-border/70 bg-background/70 text-sm leading-6"
-                  />
-                </div>
-
-                <div className="mt-4 flex-1 border-t border-border/60 pt-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Tasks</div>
-                    <span className="text-xs text-muted-foreground">
-                      {dayTasks.length} task{dayTasks.length === 1 ? "" : "s"}
-                    </span>
+                <div className="mt-4 grid gap-5 lg:grid-cols-[minmax(0,1.1fr)_minmax(22rem,0.9fr)]">
+                  <div className="space-y-2">
+                    <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Notes</div>
+                    <Textarea
+                      value={entries[key] ?? ""}
+                      onChange={(event) => updateEntry(key, event.target.value)}
+                      onBlur={() => {
+                        const body = entries[key] ?? "";
+                        if (body !== (savedEntries[key] ?? "")) {
+                          void saveDay(key, body);
+                        }
+                      }}
+                      placeholder="Write in the day"
+                      className="min-h-44 resize-y border-border/70 bg-background/70 text-sm leading-6"
+                    />
                   </div>
 
-                  <form className="mt-2 flex items-center gap-2" onSubmit={(event) => createDatedTask(key, event)}>
-                    <Input
-                      value={taskTitle}
-                      onChange={(event) => updateNewTaskTitle(key, event.target.value)}
-                      placeholder="Add task"
-                      className="h-9 bg-background text-sm"
-                      disabled={createTask.isPending}
-                    />
-                    <Button
-                      type="submit"
-                      size="icon"
-                      className="h-9 w-9 shrink-0"
-                      disabled={!taskTitle.trim() || createTask.isPending}
-                      aria-label={`Add task for ${format(day, "MMMM d")}`}
-                    >
-                      <Plus className={cn("h-4 w-4", isCreatingThisDay && "animate-pulse")} />
-                    </Button>
-                  </form>
+                  <div className="min-w-0 space-y-3 lg:border-l lg:border-border/60 lg:pl-5">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Tasks</div>
+                      <span className="text-xs text-muted-foreground">
+                        {dayTasks.length} task{dayTasks.length === 1 ? "" : "s"}
+                      </span>
+                    </div>
 
-                  <div className="mt-3 space-y-2">
-                    {tasksLoading ? (
-                      <>
-                        <Skeleton className="h-10 rounded-xl" />
-                        <Skeleton className="h-10 rounded-xl" />
-                      </>
-                    ) : dayTasks.length > 0 ? (
-                      dayTasks.map((task, index) => (
-                        <TaskItem
-                          key={task.id}
-                          task={task}
-                          index={index}
-                          compact
-                          parentTaskOptions={parentTaskOptions}
-                          taskGroupOptions={taskGroupOptions}
-                        />
-                      ))
-                    ) : (
-                      <p className="rounded-lg border border-dashed border-border/60 px-3 py-2 text-xs text-muted-foreground">
-                        No dated tasks.
-                      </p>
-                    )}
+                    <form className="flex items-center gap-2" onSubmit={(event) => createDatedTask(key, event)}>
+                      <Input
+                        value={taskTitle}
+                        onChange={(event) => updateNewTaskTitle(key, event.target.value)}
+                        placeholder="Add task"
+                        className="h-10 bg-background text-sm"
+                        disabled={createTask.isPending}
+                      />
+                      <Button
+                        type="submit"
+                        size="icon"
+                        className="h-10 w-10 shrink-0"
+                        disabled={!taskTitle.trim() || createTask.isPending}
+                        aria-label={`Add task for ${format(day, "MMMM d")}`}
+                      >
+                        <Plus className={cn("h-4 w-4", isCreatingThisDay && "animate-pulse")} />
+                      </Button>
+                    </form>
+
+                    <div className="space-y-2">
+                      {tasksLoading ? (
+                        <>
+                          <Skeleton className="h-12 rounded-xl" />
+                          <Skeleton className="h-12 rounded-xl" />
+                        </>
+                      ) : dayTasks.length > 0 ? (
+                        dayTasks.map((task, index) => (
+                          <TaskItem
+                            key={task.id}
+                            task={task}
+                            index={index}
+                            compact
+                            wrapTitle
+                            hideDueDate
+                            parentTaskOptions={parentTaskOptions}
+                            taskGroupOptions={taskGroupOptions}
+                          />
+                        ))
+                      ) : (
+                        <p className="rounded-lg border border-dashed border-border/60 px-3 py-3 text-sm text-muted-foreground">
+                          No dated tasks.
+                        </p>
+                      )}
+                    </div>
                   </div>
                 </div>
               </section>
