@@ -35,12 +35,22 @@ export const monthlyIncomeTable = pgTable(
 
 export const transactionsTable = pgTable("transactions", {
   id: serial("id").primaryKey(),
+  transactionType: text("transaction_type").notNull().default("expense"),
   amount: numeric("amount", { precision: 10, scale: 2 }).notNull(),
   merchant: text("merchant").notNull(),
   categoryId: integer("category_id").references(() => budgetCategoriesTable.id, { onDelete: "set null" }),
   date: text("date").notNull(),
   notes: text("notes"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const transactionSplitsTable = pgTable("transaction_splits", {
+  id: serial("id").primaryKey(),
+  transactionId: integer("transaction_id")
+    .notNull()
+    .references(() => transactionsTable.id, { onDelete: "cascade" }),
+  categoryId: integer("category_id").references(() => budgetCategoriesTable.id, { onDelete: "set null" }),
+  amount: numeric("amount", { precision: 10, scale: 2 }).notNull(),
 });
 
 // Reserve entities are kept separate from monthly budget categories so future
@@ -118,6 +128,10 @@ export type MonthlyIncome = typeof monthlyIncomeTable.$inferSelect;
 export const insertTransactionSchema = createInsertSchema(transactionsTable).omit({ id: true, createdAt: true });
 export type InsertTransaction = z.infer<typeof insertTransactionSchema>;
 export type Transaction = typeof transactionsTable.$inferSelect;
+
+export const insertTransactionSplitSchema = createInsertSchema(transactionSplitsTable).omit({ id: true });
+export type InsertTransactionSplit = z.infer<typeof insertTransactionSplitSchema>;
+export type TransactionSplit = typeof transactionSplitsTable.$inferSelect;
 
 export const insertReserveFundSchema = createInsertSchema(reserveFundsTable).omit({
   id: true,

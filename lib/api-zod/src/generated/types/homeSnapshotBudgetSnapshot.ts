@@ -10,6 +10,9 @@ export type HomeSnapshotBudgetSnapshot = {
   totalAvailable: number;
   totalSpent: number;
   totalLeft: number;
+  incomeAmount?: number;
+  incomeTransactionsTotal?: number;
+  incomeRemaining?: number;
   month: number;
   year: number;
 };

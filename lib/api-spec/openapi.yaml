@@ -915,11 +915,43 @@ components:
           type: number
       required: [categoryId, year, month, budgetAmount]
 
+    TransactionType:
+      type: string
+      enum: [expense, income]
+
+    TransactionSplit:
+      type: object
+      properties:
+        id:
+          type: integer
+          nullable: true
+        categoryId:
+          type: integer
+          nullable: true
+        categoryName:
+          type: string
+          nullable: true
+        amount:
+          type: number
+      required: [amount]
+
+    TransactionSplitInput:
+      type: object
+      properties:
+        categoryId:
+          type: integer
+          nullable: true
+        amount:
+          type: number
+      required: [amount]
+
     Transaction:
       type: object
       properties:
         id:
           type: integer
+        type:
+          $ref: "#/components/schemas/TransactionType"
         amount:
           type: number
         merchant:
@@ -930,6 +962,10 @@ components:
         categoryName:
           type: string
           nullable: true
+        splits:
+          type: array
+          items:
+            $ref: "#/components/schemas/TransactionSplitInput"
         date:
           type: string
           format: date
@@ -939,11 +975,13 @@ components:
         createdAt:
           type: string
           format: date-time
-      required: [id, amount, merchant, date, createdAt]
+      required: [id, type, amount, merchant, splits, date, createdAt]
 
     CreateTransactionBody:
       type: object
       properties:
+        type:
+          $ref: "#/components/schemas/TransactionType"
         amount:
           type: number
         merchant:
@@ -951,6 +989,10 @@ components:
         categoryId:
           type: integer
           nullable: true
+        splits:
+          type: array
+          items:
+            $ref: "#/components/schemas/TransactionSplitInput"
         date:
           type: string
           format: date
@@ -963,6 +1005,8 @@ components:
     UpdateTransactionBody:
       type: object
       properties:
+        type:
+          $ref: "#/components/schemas/TransactionType"
         amount:
           type: number
         merchant:
@@ -970,6 +1014,10 @@ components:
         categoryId:
           type: integer
           nullable: true
+        splits:
+          type: array
+          items:
+            $ref: "#/components/schemas/TransactionSplit"
         date:
           type: string
           format: date
@@ -1319,6 +1367,14 @@ components:
           type: number
         totalLeft:
           type: number
+        incomeAmount:
+          type: number
+        incomeTransactionsTotal:
+          type: number
+        incomeRemaining:
+          type: number
+        budgetOverUnder:
+          type: number
         categories:
           type: array
           items:
@@ -1382,6 +1438,12 @@ components:
             totalSpent:
               type: number
             totalLeft:
+              type: number
+            incomeAmount:
+              type: number
+            incomeTransactionsTotal:
+              type: number
+            incomeRemaining:
               type: number
             month:
               type: integer

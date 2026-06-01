@@ -16,6 +16,10 @@ export interface BudgetDashboard {
   totalAvailable: number;
   totalSpent: number;
   totalLeft: number;
+  incomeAmount?: number;
+  incomeTransactionsTotal?: number;
+  incomeRemaining?: number;
+  budgetOverUnder?: number;
   categories: BudgetCategoryLine[];
   recentTransactions: Transaction[];
 }

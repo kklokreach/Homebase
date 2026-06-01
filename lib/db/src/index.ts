@@ -15,8 +15,34 @@ export const db = drizzle(pool, { schema });
 
 export async function ensureSchema() {
   await pool.query(`
+    ALTER TABLE transactions
+      ADD COLUMN IF NOT EXISTS transaction_type text NOT NULL DEFAULT 'expense';
+
     ALTER TABLE budget_categories
       ADD COLUMN IF NOT EXISTS group_name text;
+
+    CREATE TABLE IF NOT EXISTS transaction_splits (
+      id serial PRIMARY KEY,
+      transaction_id integer NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
+      category_id integer REFERENCES budget_categories(id) ON DELETE SET NULL,
+      amount numeric(10, 2) NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS transaction_splits_transaction_id_idx
+      ON transaction_splits (transaction_id);
+
+    CREATE INDEX IF NOT EXISTS transaction_splits_category_id_idx
+      ON transaction_splits (category_id);
+
+    INSERT INTO transaction_splits (transaction_id, category_id, amount)
+    SELECT t.id, t.category_id, t.amount
+    FROM transactions t
+    WHERE t.transaction_type = 'expense'
+      AND NOT EXISTS (
+        SELECT 1
+        FROM transaction_splits s
+        WHERE s.transaction_id = t.id
+      );
 
     CREATE TABLE IF NOT EXISTS monthly_income (
       id serial PRIMARY KEY,

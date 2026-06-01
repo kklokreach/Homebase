@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { and, eq, lt, sql } from "drizzle-orm";
+import { and, eq, inArray, lt, sql } from "drizzle-orm";
 import {
   db,
   budgetCategoriesTable,
@@ -8,11 +8,61 @@ import {
   monthlyReviewsTable,
   reserveFundsTable,
   reserveTransactionsTable,
+  transactionSplitsTable,
   transactionsTable,
 } from "@workspace/db";
 import { isPlainObject, parsePositiveIntParam, sendInvalidId } from "../lib/http";
 
 const router: IRouter = Router();
+
+function isExpenseTransaction(value: string | null | undefined) {
+  return value !== "income";
+}
+
+async function buildBudgetSpendingEntries(
+  transactions: { id: number; transactionType: string; categoryId: number | null; amount: string | number; date: string }[],
+) {
+  const expenseTransactions = transactions.filter((transaction) =>
+    isExpenseTransaction(transaction.transactionType),
+  );
+  const splitMap = new Map<number, { categoryId: number | null; amount: number }[]>();
+
+  if (expenseTransactions.length > 0) {
+    const splits = await db
+      .select({
+        transactionId: transactionSplitsTable.transactionId,
+        categoryId: transactionSplitsTable.categoryId,
+        amount: transactionSplitsTable.amount,
+      })
+      .from(transactionSplitsTable)
+      .where(inArray(transactionSplitsTable.transactionId, expenseTransactions.map((tx) => tx.id)));
+
+    for (const split of splits) {
+      if (!splitMap.has(split.transactionId)) splitMap.set(split.transactionId, []);
+      splitMap.get(split.transactionId)!.push({
+        categoryId: split.categoryId ?? null,
+        amount: Number(split.amount),
+      });
+    }
+  }
+
+  return expenseTransactions.flatMap((transaction) => {
+    const splits = splitMap.get(transaction.id) ?? [];
+    if (splits.length > 0) {
+      return splits.map((split) => ({
+        categoryId: split.categoryId,
+        amount: split.amount,
+        date: transaction.date,
+      }));
+    }
+
+    return [{
+      categoryId: transaction.categoryId ?? null,
+      amount: Number(transaction.amount),
+      date: transaction.date,
+    }];
+  });
+}
 
 function parsePositiveInt(value: unknown, field: string): number | { error: string } {
   if (typeof value !== "number" || !Number.isInteger(value) || value <= 0) {
@@ -106,13 +156,14 @@ async function buildBudgetReview(year: number, month: number) {
     .select()
     .from(transactionsTable)
     .where(sql`${transactionsTable.date} LIKE ${prefix + "%"}`);
+  const spendingEntries = await buildBudgetSpendingEntries(transactions);
 
   const lines = categories.map((category) => {
     const budgetEntry = monthlyBudgets.find((item) => item.categoryId === category.id);
     const budgeted = Number(budgetEntry?.budgetAmount ?? 0);
-    const spent = transactions
-      .filter((tx) => tx.categoryId === category.id)
-      .reduce((sum, tx) => sum + Number(tx.amount), 0);
+    const spent = spendingEntries
+      .filter((entry) => entry.categoryId === category.id)
+      .reduce((sum, entry) => sum + entry.amount, 0);
     const left = budgeted - spent;
 
     return {

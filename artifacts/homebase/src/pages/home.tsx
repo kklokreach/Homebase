@@ -18,13 +18,16 @@ import {
   type GroupableTask,
 } from "@/lib/task-groups";
 
-function fmt(n: number) {
-  return n.toLocaleString("en-US", {
+function fmt(n: number, showSign = false) {
+  const abs = Math.abs(n).toLocaleString("en-US", {
     style: "currency",
     currency: "USD",
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
+  if (showSign && n > 0) return `+${abs}`;
+  if (n < 0) return `-${abs}`;
+  return abs;
 }
 
 function homeLoadErrorMessage(error: unknown) {
@@ -177,7 +180,7 @@ if (!snapshot) return <div className="px-4 pt-5 max-w-2xl mx-auto text-sm text-m
               <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Recent</h2>
               <Link href="/finances">
                 <span className="text-xs text-primary hover:underline flex items-center gap-0.5">
-                  All spending <ChevronRight className="w-3 h-3" />
+                  All transactions <ChevronRight className="w-3 h-3" />
                 </span>
               </Link>
             </div>
@@ -191,8 +194,12 @@ if (!snapshot) return <div className="px-4 pt-5 max-w-2xl mx-auto text-sm text-m
                       {tx.categoryName ? ` · ${tx.categoryName}` : ""}
                     </span>
                   </div>
-                  <span className="text-sm font-semibold tabular-nums text-foreground ml-4 shrink-0">
-                    {fmt(tx.amount)}
+                  <span
+                    className={`text-sm font-semibold tabular-nums ml-4 shrink-0 ${
+                      tx.type === "income" ? "text-primary" : "text-foreground"
+                    }`}
+                  >
+                    {tx.type === "income" ? fmt(tx.amount, true) : fmt(tx.amount)}
                   </span>
                 </div>
               ))}

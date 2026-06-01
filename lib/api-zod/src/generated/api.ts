@@ -398,12 +398,23 @@ export const ListTransactionsQueryParams = zod.object({
   limit: zod.coerce.number().optional(),
 });
 
+export const TransactionType = zod.enum(["expense", "income"]);
+
+export const TransactionSplit = zod.object({
+  id: zod.number().nullish(),
+  categoryId: zod.number().nullish(),
+  categoryName: zod.string().nullish(),
+  amount: zod.number(),
+});
+
 export const ListTransactionsResponseItem = zod.object({
   id: zod.number(),
+  type: TransactionType,
   amount: zod.number(),
   merchant: zod.string(),
   categoryId: zod.number().nullish(),
   categoryName: zod.string().nullish(),
+  splits: zod.array(TransactionSplit),
   date: zod.coerce.date(),
   notes: zod.string().nullish(),
   createdAt: zod.coerce.date(),
@@ -414,9 +425,11 @@ export const ListTransactionsResponse = zod.array(ListTransactionsResponseItem);
  * @summary Create a transaction
  */
 export const CreateTransactionBody = zod.object({
+  type: TransactionType.optional(),
   amount: zod.number(),
   merchant: zod.string(),
   categoryId: zod.number().nullish(),
+  splits: zod.array(TransactionSplit.omit({ id: true, categoryName: true })).optional(),
   date: zod.coerce.date().nullish(),
   notes: zod.string().nullish(),
 });
@@ -429,19 +442,23 @@ export const UpdateTransactionParams = zod.object({
 });
 
 export const UpdateTransactionBody = zod.object({
+  type: TransactionType.optional(),
   amount: zod.number().optional(),
   merchant: zod.string().optional(),
   categoryId: zod.number().nullish(),
+  splits: zod.array(TransactionSplit.omit({ id: true, categoryName: true })).optional(),
   date: zod.coerce.date().optional(),
   notes: zod.string().nullish(),
 });
 
 export const UpdateTransactionResponse = zod.object({
   id: zod.number(),
+  type: TransactionType,
   amount: zod.number(),
   merchant: zod.string(),
   categoryId: zod.number().nullish(),
   categoryName: zod.string().nullish(),
+  splits: zod.array(TransactionSplit),
   date: zod.coerce.date(),
   notes: zod.string().nullish(),
   createdAt: zod.coerce.date(),
@@ -471,6 +488,7 @@ export const GetBudgetDashboardResponse = zod.object({
   totalSpent: zod.number(),
   totalLeft: zod.number(),
   incomeAmount: zod.number().optional(),
+  incomeTransactionsTotal: zod.number().optional(),
   incomeRemaining: zod.number().optional(),
   budgetOverUnder: zod.number().optional(),
   categories: zod.array(
@@ -488,10 +506,12 @@ export const GetBudgetDashboardResponse = zod.object({
   recentTransactions: zod.array(
     zod.object({
       id: zod.number(),
+      type: TransactionType,
       amount: zod.number(),
       merchant: zod.string(),
       categoryId: zod.number().nullish(),
       categoryName: zod.string().nullish(),
+      splits: zod.array(TransactionSplit),
       date: zod.coerce.date(),
       notes: zod.string().nullish(),
       createdAt: zod.coerce.date(),
@@ -606,6 +626,7 @@ export const GetHomeSnapshotResponse = zod.object({
     totalSpent: zod.number(),
     totalLeft: zod.number(),
     incomeAmount: zod.number().optional(),
+    incomeTransactionsTotal: zod.number().optional(),
     incomeRemaining: zod.number().optional(),
     month: zod.number(),
     year: zod.number(),
@@ -613,10 +634,12 @@ export const GetHomeSnapshotResponse = zod.object({
   recentTransactions: zod.array(
     zod.object({
       id: zod.number(),
+      type: TransactionType,
       amount: zod.number(),
       merchant: zod.string(),
       categoryId: zod.number().nullish(),
       categoryName: zod.string().nullish(),
+      splits: zod.array(TransactionSplit),
       date: zod.coerce.date(),
       notes: zod.string().nullish(),
       createdAt: zod.coerce.date(),

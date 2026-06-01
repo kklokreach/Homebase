@@ -7,9 +7,14 @@
  */
 
 export interface CreateTransactionBody {
+  type?: "expense" | "income";
   amount: number;
   merchant: string;
   categoryId?: number | null;
+  splits?: {
+    categoryId?: number | null;
+    amount: number;
+  }[];
   date?: Date | null;
   notes?: string | null;
 }

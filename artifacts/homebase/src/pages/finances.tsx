@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { format, addMonths, subMonths } from "date-fns";
-import { ChevronLeft, ChevronRight, Pencil, Save, Trash2, X, Wallet } from "lucide-react";
+import { ChevronLeft, ChevronRight, Pencil, Plus, Save, Trash2, X, Wallet } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useGetBudgetDashboard,
@@ -41,12 +41,23 @@ type CategoryOption = Category & {
   remaining?: number | null;
 };
 
+type TransactionType = "expense" | "income";
+
+type TransactionSplit = {
+  id: number | null;
+  categoryId: number | null;
+  categoryName: string | null;
+  amount: number;
+};
+
 type Transaction = {
   id: number;
+  type: TransactionType;
   amount: number;
   merchant: string;
   categoryId: number | null;
   categoryName: string | null;
+  splits: TransactionSplit[];
   date: string;
   notes: string | null;
   createdAt: string;
@@ -65,9 +76,16 @@ type DashboardCategory = {
 
 type DashboardWithIncome = {
   incomeAmount?: number;
+  incomeTransactionsTotal?: number;
   incomeRemaining?: number;
   budgetOverUnder?: number;
   categories: DashboardCategory[];
+};
+
+type TransactionGroupItem = {
+  tx: Transaction;
+  amount: number;
+  categoryId: number | null;
 };
 
 type TransactionGroup = {
@@ -75,7 +93,7 @@ type TransactionGroup = {
   label: string;
   total: number;
   count: number;
-  transactions: Transaction[];
+  transactions: TransactionGroupItem[];
 };
 
 type ReserveFund = {
@@ -121,6 +139,22 @@ type ReserveTransactionDraft = {
   notes: string;
 };
 
+type TransactionSplitDraft = {
+  categoryId: string;
+  amount: string;
+};
+
+type TransactionDraft = {
+  type: TransactionType;
+  amount: string;
+  merchant: string;
+  categoryId: string;
+  splitMode: boolean;
+  splits: TransactionSplitDraft[];
+  date: string;
+  notes: string;
+};
+
 function fmt(n: number, showSign = false) {
   const abs = Math.abs(n).toLocaleString("en-US", {
     style: "currency",
@@ -139,8 +173,56 @@ function categoryOptionLabel(cat: CategoryOption) {
     : `${cat.name} (${fmt(cat.remaining)} remaining)`;
 }
 
+function cleanMoneyInput(value: string) {
+  const cleaned = value.replace(/[^0-9.]/g, "");
+  const [first, ...rest] = cleaned.split(".");
+  return rest.length === 0 ? first : `${first}.${rest.join("")}`;
+}
+
+function parseMoney(value: string) {
+  const parsed = parseFloat(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function cents(value: number) {
+  return Math.round(value * 100);
+}
+
+function splitDraftTotal(splits: TransactionSplitDraft[]) {
+  return splits.reduce((sum, split) => sum + parseMoney(split.amount), 0);
+}
+
+function buildSplitPayload(splits: TransactionSplitDraft[]) {
+  return splits
+    .map((split) => ({
+      categoryId: split.categoryId === "null" ? null : Number(split.categoryId),
+      amount: parseMoney(split.amount),
+    }))
+    .filter((split) => split.amount > 0);
+}
+
+function emptyTransactionDraft(savedCategoryId = "null"): TransactionDraft {
+  return {
+    type: "expense",
+    amount: "",
+    merchant: "",
+    categoryId: savedCategoryId,
+    splitMode: false,
+    splits: [{ categoryId: savedCategoryId, amount: "" }],
+    date: todayInputValue(),
+    notes: "",
+  };
+}
+
 function todayInputValue() {
   return new Date().toISOString().split("T")[0];
+}
+
+function defaultDateForMonth(year: number, month: number) {
+  const today = new Date();
+  const lastDay = new Date(year, month, 0).getDate();
+  const day = Math.min(today.getDate(), lastDay);
+  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
 
 function fmtReserveDelta(type: ReserveTransactionType, amount: number) {
@@ -212,38 +294,84 @@ function TransactionForm({
       ? localStorage.getItem(LAST_CATEGORY_KEY) ?? "null"
       : "null";
 
-  const [amount, setAmount] = useState("");
-  const [merchant, setMerchant] = useState("");
-  const [categoryId, setCategoryId] = useState(savedCat);
-  const [notes, setNotes] = useState("");
+  const [draft, setDraft] = useState<TransactionDraft>(() => emptyTransactionDraft(savedCat));
   const [isSaving, setIsSaving] = useState(false);
   const { toast } = useToast();
+  const amountValue = parseMoney(draft.amount);
+  const splitTotal = splitDraftTotal(draft.splits);
+  const splitRemaining = amountValue - splitTotal;
+
+  function updateSplit(index: number, updates: Partial<TransactionSplitDraft>) {
+    setDraft((prev) => ({
+      ...prev,
+      splits: prev.splits.map((split, i) =>
+        i === index ? { ...split, ...updates } : split,
+      ),
+    }));
+  }
+
+  function startSplitMode() {
+    setDraft((prev) => ({
+      ...prev,
+      splitMode: true,
+      splits: [
+        { categoryId: prev.categoryId, amount: prev.amount },
+        { categoryId: "null", amount: "" },
+      ],
+    }));
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    const parsed = parseFloat(amount);
-    if (!parsed || !merchant.trim()) return;
+    if (cents(amountValue) <= 0 || !draft.merchant.trim()) return;
+
+    let categoryId: number | null = null;
+    let splits: { categoryId: number | null; amount: number }[] = [];
+
+    if (draft.type === "expense") {
+      if (draft.splitMode) {
+        splits = buildSplitPayload(draft.splits);
+        if (splits.length === 0) {
+          toast({ title: "Add at least one split amount", variant: "destructive" });
+          return;
+        }
+        const total = splits.reduce((sum, split) => sum + split.amount, 0);
+        if (cents(total) !== cents(amountValue)) {
+          toast({ title: "Split amounts must match the transaction amount", variant: "destructive" });
+          return;
+        }
+        categoryId = splits.length === 1 ? splits[0].categoryId : null;
+      } else {
+        categoryId = draft.categoryId === "null" ? null : Number(draft.categoryId);
+      }
+    }
 
     try {
       setIsSaving(true);
       await api("/transactions", {
         method: "POST",
         body: JSON.stringify({
-          amount: parsed,
-          merchant: merchant.trim(),
-          categoryId: categoryId === "null" ? null : Number(categoryId),
-          notes: notes.trim() || null,
-          date: `${year}-${String(month).padStart(2, "0")}-${String(
-            new Date().getDate()
-          ).padStart(2, "0")}`,
+          type: draft.type,
+          amount: amountValue,
+          merchant: draft.merchant.trim(),
+          categoryId,
+          splits,
+          notes: draft.notes.trim() || null,
+          date: defaultDateForMonth(year, month),
         }),
       });
 
-      setAmount("");
-      setMerchant("");
-      setNotes("");
+      const nextSavedCategory =
+        draft.type === "income"
+          ? draft.categoryId
+          : draft.type === "expense" && !draft.splitMode
+          ? draft.categoryId
+          : splits[0]?.categoryId == null
+          ? "null"
+          : String(splits[0].categoryId);
+      setDraft(emptyTransactionDraft(nextSavedCategory));
       if (typeof window !== "undefined") {
-        localStorage.setItem(LAST_CATEGORY_KEY, categoryId);
+        localStorage.setItem(LAST_CATEGORY_KEY, nextSavedCategory);
       }
       onSaved();
       toast({ title: "Transaction added" });
@@ -258,39 +386,154 @@ function TransactionForm({
     <form onSubmit={handleSubmit} className="rounded-2xl border bg-card p-4 shadow-sm space-y-3">
       <div className="text-sm font-medium">Quick add transaction</div>
 
-      <div className="grid gap-3 md:grid-cols-4">
+      <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_10rem_auto]">
         <Input
           inputMode="decimal"
           placeholder="Amount"
-          value={amount}
-          onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, ""))}
+          value={draft.amount}
+          onChange={(e) =>
+            setDraft((prev) => ({ ...prev, amount: cleanMoneyInput(e.target.value) }))
+          }
         />
         <Input
-          placeholder="Merchant"
-          value={merchant}
-          onChange={(e) => setMerchant(e.target.value)}
+          placeholder={draft.type === "income" ? "Source" : "Merchant"}
+          value={draft.merchant}
+          onChange={(e) => setDraft((prev) => ({ ...prev, merchant: e.target.value }))}
         />
         <select
-          value={categoryId}
-          onChange={(e) => setCategoryId(e.target.value)}
+          value={draft.type}
+          onChange={(e) =>
+            setDraft((prev) => ({
+              ...prev,
+              type: e.target.value as TransactionType,
+              splitMode: e.target.value === "expense" ? prev.splitMode : false,
+            }))
+          }
           className="h-10 rounded-md border border-input bg-background px-3 text-sm"
         >
-          <option value="null">No category</option>
-          {categories.map((cat) => (
-            <option key={cat.id} value={String(cat.id)}>
-              {categoryOptionLabel(cat)}
-            </option>
-          ))}
+          <option value="expense">Expense</option>
+          <option value="income">Income</option>
         </select>
         <Button type="submit" disabled={isSaving}>
           {isSaving ? "Saving..." : "Add"}
         </Button>
       </div>
 
+      {draft.type === "expense" && !draft.splitMode ? (
+        <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto]">
+          <select
+            value={draft.categoryId}
+            onChange={(e) =>
+              setDraft((prev) => ({ ...prev, categoryId: e.target.value }))
+            }
+            className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+          >
+            <option value="null">No category</option>
+            {categories.map((cat) => (
+              <option key={cat.id} value={String(cat.id)}>
+                {categoryOptionLabel(cat)}
+              </option>
+            ))}
+          </select>
+          <Button type="button" variant="outline" onClick={startSplitMode}>
+            <Plus className="mr-2 h-4 w-4" />
+            Split
+          </Button>
+        </div>
+      ) : null}
+
+      {draft.type === "expense" && draft.splitMode ? (
+        <div className="rounded-xl border p-3 space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="text-sm font-medium">Category splits</div>
+            <div
+              className={cn(
+                "text-sm",
+                cents(splitRemaining) === 0
+                  ? "text-primary"
+                  : splitRemaining < 0
+                  ? "text-destructive"
+                  : "text-muted-foreground",
+              )}
+            >
+              Remaining {fmt(splitRemaining)}
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            {draft.splits.map((split, index) => (
+              <div key={index} className="grid gap-2 md:grid-cols-[minmax(0,1fr)_9rem_auto]">
+                <select
+                  value={split.categoryId}
+                  onChange={(e) => updateSplit(index, { categoryId: e.target.value })}
+                  className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+                >
+                  <option value="null">No category</option>
+                  {categories.map((cat) => (
+                    <option key={cat.id} value={String(cat.id)}>
+                      {categoryOptionLabel(cat)}
+                    </option>
+                  ))}
+                </select>
+                <Input
+                  inputMode="decimal"
+                  placeholder="Amount"
+                  value={split.amount}
+                  onChange={(e) => updateSplit(index, { amount: cleanMoneyInput(e.target.value) })}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  onClick={() =>
+                    setDraft((prev) => ({
+                      ...prev,
+                      splits: prev.splits.filter((_, i) => i !== index),
+                    }))
+                  }
+                  disabled={draft.splits.length === 1}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+            ))}
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() =>
+                setDraft((prev) => ({
+                  ...prev,
+                  splits: [...prev.splits, { categoryId: "null", amount: "" }],
+                }))
+              }
+            >
+              <Plus className="mr-2 h-4 w-4" />
+              Add split
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() =>
+                setDraft((prev) => ({
+                  ...prev,
+                  splitMode: false,
+                  categoryId: prev.splits[0]?.categoryId ?? prev.categoryId,
+                }))
+              }
+            >
+              Single category
+            </Button>
+          </div>
+        </div>
+      ) : null}
+
       <Input
         placeholder="Notes (optional)"
-        value={notes}
-        onChange={(e) => setNotes(e.target.value)}
+        value={draft.notes}
+        onChange={(e) => setDraft((prev) => ({ ...prev, notes: e.target.value }))}
       />
     </form>
   );
@@ -398,13 +641,7 @@ export default function Finances() {
   const [txLoading, setTxLoading] = useState(false);
   const [openTransactionGroups, setOpenTransactionGroups] = useState<string[]>([]);
   const [editingTxId, setEditingTxId] = useState<number | null>(null);
-  const [txDraft, setTxDraft] = useState({
-    amount: "",
-    merchant: "",
-    categoryId: "null",
-    date: "",
-    notes: "",
-  });
+  const [txDraft, setTxDraft] = useState<TransactionDraft>(() => emptyTransactionDraft());
   const [reserveFunds, setReserveFunds] = useState<ReserveFund[]>([]);
   const [reserveTransactions, setReserveTransactions] = useState<ReserveTransaction[]>([]);
   const [reserveLoading, setReserveLoading] = useState(false);
@@ -499,29 +736,85 @@ export default function Finances() {
     refreshReserves();
   }, []);
 
+  function updateTxDraftSplit(index: number, updates: Partial<TransactionSplitDraft>) {
+    setTxDraft((prev) => ({
+      ...prev,
+      splits: prev.splits.map((split, i) =>
+        i === index ? { ...split, ...updates } : split,
+      ),
+    }));
+  }
+
   function startEditTx(tx: Transaction) {
-    const groupKey = tx.categoryId == null ? "uncategorized" : `category-${tx.categoryId}`;
+    const splits =
+      tx.splits.length > 0
+        ? tx.splits
+        : tx.type === "expense"
+        ? [{
+            id: null,
+            categoryId: tx.categoryId,
+            categoryName: tx.categoryName,
+            amount: tx.amount,
+          }]
+        : [];
+    const primaryCategoryId = splits.length === 1 ? splits[0].categoryId : tx.categoryId;
+    const groupKey =
+      tx.type === "income"
+        ? "income"
+        : primaryCategoryId == null
+        ? "uncategorized"
+        : `category-${primaryCategoryId}`;
     setOpenTransactionGroups((prev) =>
       prev.includes(groupKey) ? prev : [...prev, groupKey]
     );
     setEditingTxId(tx.id);
     setTxDraft({
+      type: tx.type,
       amount: String(tx.amount),
       merchant: tx.merchant,
-      categoryId: tx.categoryId == null ? "null" : String(tx.categoryId),
+      categoryId: primaryCategoryId == null ? "null" : String(primaryCategoryId),
+      splitMode: tx.type === "expense" && splits.length > 1,
+      splits: splits.length > 0
+        ? splits.map((split) => ({
+            categoryId: split.categoryId == null ? "null" : String(split.categoryId),
+            amount: String(split.amount),
+          }))
+        : [{ categoryId: "null", amount: "" }],
       date: String(tx.date).slice(0, 10),
       notes: tx.notes ?? "",
     });
   }
 
   async function saveTransaction(id: number) {
+    const amount = parseMoney(txDraft.amount);
+    if (cents(amount) <= 0 || !txDraft.merchant.trim()) return;
+
+    let categoryId: number | null = null;
+    let splits: { categoryId: number | null; amount: number }[] = [];
+
+    if (txDraft.type === "expense") {
+      if (txDraft.splitMode) {
+        splits = buildSplitPayload(txDraft.splits);
+        const total = splits.reduce((sum, split) => sum + split.amount, 0);
+        if (splits.length === 0 || cents(total) !== cents(amount)) {
+          toast({ title: "Split amounts must match the transaction amount", variant: "destructive" });
+          return;
+        }
+        categoryId = splits.length === 1 ? splits[0].categoryId : null;
+      } else {
+        categoryId = txDraft.categoryId === "null" ? null : Number(txDraft.categoryId);
+      }
+    }
+
     try {
       await api(`/transactions/${id}`, {
         method: "PUT",
         body: JSON.stringify({
-          amount: parseFloat(txDraft.amount || "0") || 0,
+          type: txDraft.type,
+          amount,
           merchant: txDraft.merchant.trim(),
-          categoryId: txDraft.categoryId === "null" ? null : Number(txDraft.categoryId),
+          categoryId,
+          splits,
           date: txDraft.date,
           notes: txDraft.notes.trim() || null,
         }),
@@ -711,13 +1004,7 @@ export default function Finances() {
   const groupedTransactions = useMemo<Map<string, TransactionGroup>>(() => {
     const groups = new Map<string, TransactionGroup>();
 
-    for (const tx of transactions) {
-      const key = tx.categoryId == null ? "uncategorized" : `category-${tx.categoryId}`;
-      const label =
-        tx.categoryName ??
-        (tx.categoryId != null ? txCategoryName.get(tx.categoryId) : null) ??
-        "Uncategorized";
-
+    function addGroupItem(key: string, label: string, item: TransactionGroupItem) {
       if (!groups.has(key)) {
         groups.set(key, {
           key,
@@ -729,9 +1016,30 @@ export default function Finances() {
       }
 
       const group = groups.get(key)!;
-      group.transactions.push(tx);
-      group.total += tx.amount;
+      group.transactions.push(item);
+      group.total += item.amount;
       group.count += 1;
+    }
+
+    for (const tx of transactions) {
+      if (tx.type === "income") {
+        addGroupItem("income", "Income", { tx, amount: tx.amount, categoryId: null });
+        continue;
+      }
+
+      const splits = tx.splits.length > 0
+        ? tx.splits
+        : [{ id: null, categoryId: tx.categoryId, categoryName: tx.categoryName, amount: tx.amount }];
+
+      for (const split of splits) {
+        const key = split.categoryId == null ? "uncategorized" : `category-${split.categoryId}`;
+        const label =
+          split.categoryName ??
+          (split.categoryId != null ? txCategoryName.get(split.categoryId) : null) ??
+          "Uncategorized";
+
+        addGroupItem(key, label, { tx, amount: split.amount, categoryId: split.categoryId });
+      }
     }
 
     return groups;
@@ -755,6 +1063,7 @@ export default function Finances() {
   }, [dashboardCategories]);
 
   const uncategorizedGroup = groupedTransactions.get("uncategorized");
+  const incomeGroup = groupedTransactions.get("income");
   const allTransactionsSorted = useMemo(() => {
     return [...transactions].sort((a, b) => {
       const dateDiff = new Date(b.date).getTime() - new Date(a.date).getTime();
@@ -860,7 +1169,9 @@ export default function Finances() {
             </div>
           ) : (
             <div className="space-y-3">
-              {group.transactions.map((tx) => renderTransactionCard(tx))}
+              {group.transactions.map((item) =>
+                renderTransactionCard(item.tx, { displayAmount: item.amount, categoryId: item.categoryId })
+              )}
             </div>
           )}
         </AccordionContent>
@@ -868,8 +1179,17 @@ export default function Finances() {
     );
   }
 
-  function renderTransactionCard(tx: Transaction) {
+  function renderTransactionCard(
+    tx: Transaction,
+    options: { displayAmount?: number; categoryId?: number | null } = {},
+  ) {
     const editing = editingTxId === tx.id;
+    const displayAmount = options.displayAmount ?? tx.amount;
+    const isPartial = cents(displayAmount) !== cents(tx.amount);
+    const splitRemaining = parseMoney(txDraft.amount) - splitDraftTotal(txDraft.splits);
+    const splitSummary = tx.splits
+      .map((split) => `${split.categoryName ?? "Uncategorized"} ${fmt(split.amount)}`)
+      .join(" / ");
 
     return (
       <div key={tx.id} className="rounded-xl border p-3 space-y-3">
@@ -879,12 +1199,34 @@ export default function Finances() {
               <div className="font-medium">{tx.merchant}</div>
               <div className="text-sm text-muted-foreground">
                 {format(new Date(tx.date), "MMM d, yyyy")}
+                {tx.type === "income"
+                  ? " · Income"
+                  : tx.categoryName
+                  ? ` · ${tx.categoryName}`
+                  : ""}
                 {tx.notes ? ` · ${tx.notes}` : ""}
               </div>
+              {tx.type === "expense" && tx.splits.length > 1 ? (
+                <div className="mt-1 text-xs text-muted-foreground">{splitSummary}</div>
+              ) : null}
             </div>
 
             <div className="flex items-center gap-2">
-              <div className="font-semibold whitespace-nowrap">{fmt(tx.amount)}</div>
+              <div className="text-right">
+                <div
+                  className={cn(
+                    "font-semibold whitespace-nowrap",
+                    tx.type === "income" ? "text-primary" : "",
+                  )}
+                >
+                  {tx.type === "income" ? fmt(displayAmount, true) : fmt(displayAmount)}
+                </div>
+                {isPartial ? (
+                  <div className="text-xs text-muted-foreground whitespace-nowrap">
+                    of {fmt(tx.amount)}
+                  </div>
+                ) : null}
+              </div>
               <Button variant="outline" size="icon" onClick={() => startEditTx(tx)}>
                 <Pencil className="h-4 w-4" />
               </Button>
@@ -899,7 +1241,7 @@ export default function Finances() {
                 onChange={(e) =>
                   setTxDraft((prev) => ({
                     ...prev,
-                    amount: e.target.value.replace(/[^0-9.]/g, ""),
+                    amount: cleanMoneyInput(e.target.value),
                   }))
                 }
                 placeholder="Amount"
@@ -909,21 +1251,21 @@ export default function Finances() {
                 onChange={(e) =>
                   setTxDraft((prev) => ({ ...prev, merchant: e.target.value }))
                 }
-                placeholder="Merchant"
+                placeholder={txDraft.type === "income" ? "Source" : "Merchant"}
               />
               <select
-                value={txDraft.categoryId}
+                value={txDraft.type}
                 onChange={(e) =>
-                  setTxDraft((prev) => ({ ...prev, categoryId: e.target.value }))
+                  setTxDraft((prev) => ({
+                    ...prev,
+                    type: e.target.value as TransactionType,
+                    splitMode: e.target.value === "expense" ? prev.splitMode : false,
+                  }))
                 }
                 className="h-10 rounded-md border border-input bg-background px-3 text-sm"
               >
-                <option value="null">No category</option>
-                {categoryOptions.map((cat) => (
-                  <option key={cat.id} value={String(cat.id)}>
-                    {categoryOptionLabel(cat)}
-                  </option>
-                ))}
+                <option value="expense">Expense</option>
+                <option value="income">Income</option>
               </select>
               <Input
                 type="date"
@@ -933,6 +1275,130 @@ export default function Finances() {
                 }
               />
             </div>
+
+            {txDraft.type === "expense" && !txDraft.splitMode ? (
+              <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto]">
+                <select
+                  value={txDraft.categoryId}
+                  onChange={(e) =>
+                    setTxDraft((prev) => ({ ...prev, categoryId: e.target.value }))
+                  }
+                  className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+                >
+                  <option value="null">No category</option>
+                  {categoryOptions.map((cat) => (
+                    <option key={cat.id} value={String(cat.id)}>
+                      {categoryOptionLabel(cat)}
+                    </option>
+                  ))}
+                </select>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() =>
+                    setTxDraft((prev) => ({
+                      ...prev,
+                      splitMode: true,
+                      splits: [
+                        { categoryId: prev.categoryId, amount: prev.amount },
+                        { categoryId: "null", amount: "" },
+                      ],
+                    }))
+                  }
+                >
+                  <Plus className="mr-2 h-4 w-4" />
+                  Split
+                </Button>
+              </div>
+            ) : null}
+
+            {txDraft.type === "expense" && txDraft.splitMode ? (
+              <div className="rounded-xl border p-3 space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="text-sm font-medium">Category splits</div>
+                  <div
+                    className={cn(
+                      "text-sm",
+                      cents(splitRemaining) === 0
+                        ? "text-primary"
+                        : splitRemaining < 0
+                        ? "text-destructive"
+                        : "text-muted-foreground",
+                    )}
+                  >
+                    Remaining {fmt(splitRemaining)}
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  {txDraft.splits.map((split, index) => (
+                    <div key={index} className="grid gap-2 md:grid-cols-[minmax(0,1fr)_9rem_auto]">
+                      <select
+                        value={split.categoryId}
+                        onChange={(e) => updateTxDraftSplit(index, { categoryId: e.target.value })}
+                        className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+                      >
+                        <option value="null">No category</option>
+                        {categoryOptions.map((cat) => (
+                          <option key={cat.id} value={String(cat.id)}>
+                            {categoryOptionLabel(cat)}
+                          </option>
+                        ))}
+                      </select>
+                      <Input
+                        inputMode="decimal"
+                        placeholder="Amount"
+                        value={split.amount}
+                        onChange={(e) => updateTxDraftSplit(index, { amount: cleanMoneyInput(e.target.value) })}
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        onClick={() =>
+                          setTxDraft((prev) => ({
+                            ...prev,
+                            splits: prev.splits.filter((_, i) => i !== index),
+                          }))
+                        }
+                        disabled={txDraft.splits.length === 1}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() =>
+                      setTxDraft((prev) => ({
+                        ...prev,
+                        splits: [...prev.splits, { categoryId: "null", amount: "" }],
+                      }))
+                    }
+                  >
+                    <Plus className="mr-2 h-4 w-4" />
+                    Add split
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() =>
+                      setTxDraft((prev) => ({
+                        ...prev,
+                        splitMode: false,
+                        categoryId: prev.splits[0]?.categoryId ?? prev.categoryId,
+                      }))
+                    }
+                  >
+                    Single category
+                  </Button>
+                </div>
+              </div>
+            ) : null}
 
             <textarea
               value={txDraft.notes}
@@ -959,10 +1425,14 @@ export default function Finances() {
             </div>
 
             <div className="text-xs text-muted-foreground">
-              Current category:{" "}
-              {tx.categoryName ??
-                txCategoryName.get(tx.categoryId ?? -1) ??
-                "No category"}
+              Current:{" "}
+              {tx.type === "income"
+                ? "Income"
+                : tx.splits.length > 1
+                ? splitSummary
+                : tx.categoryName ??
+                  txCategoryName.get(tx.categoryId ?? -1) ??
+                  "No category"}
             </div>
           </div>
         )}
@@ -1118,11 +1588,16 @@ export default function Finances() {
               </div>
             </div>
 
-            <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-6">
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
               {[
                 {
-                  label: "Income",
+                  label: "Planned income",
                   value: fmt(dashboardView?.incomeAmount ?? 0),
+                  color: "text-primary",
+                },
+                {
+                  label: "Income received",
+                  value: fmt(dashboardView?.incomeTransactionsTotal ?? 0, true),
                   color: "text-primary",
                 },
                 {
@@ -1204,7 +1679,35 @@ export default function Finances() {
                     </AccordionTrigger>
                     <AccordionContent className="border-t px-3 pt-3">
                       <div className="space-y-3">
-                        {uncategorizedGroup.transactions.map((tx) => renderTransactionCard(tx))}
+                        {uncategorizedGroup.transactions.map((item) =>
+                          renderTransactionCard(item.tx, { displayAmount: item.amount, categoryId: item.categoryId })
+                        )}
+                      </div>
+                    </AccordionContent>
+                  </AccordionItem>
+                ) : null}
+
+                {incomeGroup ? (
+                  <AccordionItem value="income" className="overflow-hidden rounded-xl border">
+                    <AccordionTrigger className="px-3 py-3 hover:no-underline">
+                      <div className="flex min-w-0 flex-1 items-center justify-between gap-3 pr-3 text-left">
+                        <div className="min-w-0">
+                          <div className="font-medium">Income</div>
+                          <div className="text-xs text-muted-foreground">
+                            Income transactions for this month
+                          </div>
+                        </div>
+                        <div className="shrink-0 text-right">
+                          <div className="text-sm font-semibold text-primary">{fmt(incomeGroup.total, true)}</div>
+                          <div className="text-xs text-muted-foreground">
+                            {incomeGroup.count} transaction{incomeGroup.count === 1 ? "" : "s"}
+                          </div>
+                        </div>
+                      </div>
+                    </AccordionTrigger>
+                    <AccordionContent className="border-t px-3 pt-3">
+                      <div className="space-y-3">
+                        {incomeGroup.transactions.map((item) => renderTransactionCard(item.tx))}
                       </div>
                     </AccordionContent>
                   </AccordionItem>

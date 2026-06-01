@@ -7,9 +7,14 @@
  */
 
 export interface UpdateTransactionBody {
+  type?: "expense" | "income";
   amount?: number;
   merchant?: string;
   categoryId?: number | null;
+  splits?: {
+    categoryId?: number | null;
+    amount: number;
+  }[];
   date?: Date;
   notes?: string | null;
 }

@@ -5,6 +5,7 @@ import {
   budgetCategoriesTable,
   monthlyBudgetsTable,
   monthlyIncomeTable,
+  transactionSplitsTable,
   transactionsTable,
 } from "@workspace/db";
 import { parsePositiveIntParam, sendInvalidId } from "../lib/http";
@@ -25,6 +26,38 @@ import {
 } from "@workspace/api-zod";
 
 const router: IRouter = Router();
+
+type TransactionType = "expense" | "income";
+
+type TransactionSplitInput = {
+  categoryId?: number | null;
+  amount: number;
+};
+
+type SerializedTransactionSplit = {
+  id: number | null;
+  categoryId: number | null;
+  categoryName: string | null;
+  amount: number;
+};
+
+type TransactionRow = {
+  id: number;
+  transactionType: string;
+  amount: string | number;
+  merchant: string;
+  categoryId: number | null;
+  categoryName: string | null | undefined;
+  date: string;
+  notes: string | null;
+  createdAt: Date;
+};
+
+type SpendingEntry = {
+  categoryId: number | null;
+  amount: number;
+  date: string;
+};
 
 function currentYearMonth() {
   const now = new Date();
@@ -69,6 +102,163 @@ function parseMonthlyIncomeBody(body: unknown) {
   if (!parsed || !Number.isFinite(amount) || amount < 0) return null;
 
   return { ...parsed, amount };
+}
+
+function normalizeTransactionType(value: string | null | undefined): TransactionType {
+  return value === "income" ? "income" : "expense";
+}
+
+function toCents(amount: number) {
+  return Math.round(amount * 100);
+}
+
+function moneyForDb(amount: number) {
+  return (toCents(amount) / 100).toFixed(2);
+}
+
+function normalizeCategoryId(value: number | null | undefined) {
+  if (value == null) return null;
+  if (!Number.isInteger(value) || value <= 0) return { error: "Category ids must be positive integers." };
+  return value;
+}
+
+function normalizeExpenseSplits(
+  amount: number,
+  categoryId: number | null | undefined,
+  splits: TransactionSplitInput[] | undefined,
+): { categoryId: number | null; splits: { categoryId: number | null; amount: number }[] } | { error: string } {
+  if (!Number.isFinite(amount) || toCents(amount) <= 0) {
+    return { error: "Transaction amount must be greater than 0." };
+  }
+
+  const source = splits && splits.length > 0
+    ? splits
+    : [{ categoryId, amount }];
+
+  const normalized = source.map((split) => {
+    const normalizedCategoryId = normalizeCategoryId(split.categoryId);
+    if (isPlainObject(normalizedCategoryId)) return normalizedCategoryId;
+
+    if (!Number.isFinite(split.amount) || toCents(split.amount) <= 0) {
+      return { error: "Split amounts must be greater than 0." };
+    }
+
+    return {
+      categoryId: normalizedCategoryId,
+      amount: toCents(split.amount) / 100,
+    };
+  });
+
+  const error = normalized.find((split) => "error" in split);
+  if (error && "error" in error) return error;
+
+  const validSplits = normalized as { categoryId: number | null; amount: number }[];
+  const total = validSplits.reduce((sum, split) => sum + toCents(split.amount), 0);
+  if (total !== toCents(amount)) {
+    return { error: "Split amounts must add up to the transaction amount." };
+  }
+
+  return {
+    categoryId: validSplits.length === 1 ? validSplits[0].categoryId : null,
+    splits: validSplits,
+  };
+}
+
+function normalizeTransactionParts(
+  type: TransactionType,
+  amount: number,
+  categoryId: number | null | undefined,
+  splits: TransactionSplitInput[] | undefined,
+): { categoryId: number | null; splits: { categoryId: number | null; amount: number }[] } | { error: string } {
+  if (!Number.isFinite(amount) || toCents(amount) <= 0) {
+    return { error: "Transaction amount must be greater than 0." };
+  }
+
+  if (type === "income") {
+    return { categoryId: null, splits: [] };
+  }
+
+  return normalizeExpenseSplits(amount, categoryId, splits);
+}
+
+function transactionSelectFields() {
+  return {
+    id: transactionsTable.id,
+    transactionType: transactionsTable.transactionType,
+    amount: transactionsTable.amount,
+    merchant: transactionsTable.merchant,
+    categoryId: transactionsTable.categoryId,
+    categoryName: budgetCategoriesTable.name,
+    date: transactionsTable.date,
+    notes: transactionsTable.notes,
+    createdAt: transactionsTable.createdAt,
+  };
+}
+
+async function loadTransactionSplits(transactionIds: number[]) {
+  const splitMap = new Map<number, SerializedTransactionSplit[]>();
+  if (transactionIds.length === 0) return splitMap;
+
+  const rows = await db
+    .select({
+      id: transactionSplitsTable.id,
+      transactionId: transactionSplitsTable.transactionId,
+      categoryId: transactionSplitsTable.categoryId,
+      categoryName: budgetCategoriesTable.name,
+      amount: transactionSplitsTable.amount,
+    })
+    .from(transactionSplitsTable)
+    .leftJoin(budgetCategoriesTable, eq(transactionSplitsTable.categoryId, budgetCategoriesTable.id))
+    .where(inArray(transactionSplitsTable.transactionId, transactionIds))
+    .orderBy(transactionSplitsTable.id);
+
+  for (const row of rows) {
+    if (!splitMap.has(row.transactionId)) splitMap.set(row.transactionId, []);
+    splitMap.get(row.transactionId)!.push({
+      id: row.id,
+      categoryId: row.categoryId ?? null,
+      categoryName: row.categoryName ?? null,
+      amount: Number(row.amount),
+    });
+  }
+
+  return splitMap;
+}
+
+async function serializeTransactionRows(rows: TransactionRow[]) {
+  const splitMap = await loadTransactionSplits(rows.map((row) => row.id));
+  return rows.map((row) => serializeTransaction(row, splitMap.get(row.id) ?? []));
+}
+
+async function buildSpendingEntries(
+  txns: { id: number; transactionType: string; amount: string | number; categoryId: number | null; date: string }[],
+): Promise<SpendingEntry[]> {
+  const expenseTxns = txns.filter((txn) => normalizeTransactionType(txn.transactionType) === "expense");
+  const splitMap = await loadTransactionSplits(expenseTxns.map((txn) => txn.id));
+  const entries: SpendingEntry[] = [];
+
+  for (const txn of expenseTxns) {
+    const splits = splitMap.get(txn.id) ?? [];
+
+    if (splits.length > 0) {
+      for (const split of splits) {
+        entries.push({
+          categoryId: split.categoryId,
+          amount: split.amount,
+          date: txn.date,
+        });
+      }
+      continue;
+    }
+
+    entries.push({
+      categoryId: txn.categoryId ?? null,
+      amount: Number(txn.amount),
+      date: txn.date,
+    });
+  }
+
+  return entries;
 }
 
 // ── Budget Categories ─────────────────────────────────────────────────────
@@ -306,32 +496,22 @@ router.get("/transactions", async (req, res): Promise<void> => {
     const prefix = `${year}-${monthStr}`;
     conditions.push(sql`${transactionsTable.date} LIKE ${prefix + "%"}`);
   }
-  if (categoryId !== undefined) {
-    conditions.push(eq(transactionsTable.categoryId, categoryId));
-  }
 
-  const query = db
-    .select({
-      id: transactionsTable.id,
-      amount: transactionsTable.amount,
-      merchant: transactionsTable.merchant,
-      categoryId: transactionsTable.categoryId,
-      categoryName: budgetCategoriesTable.name,
-      date: transactionsTable.date,
-      notes: transactionsTable.notes,
-      createdAt: transactionsTable.createdAt,
-    })
+  const rows = await db
+    .select(transactionSelectFields())
     .from(transactionsTable)
     .leftJoin(budgetCategoriesTable, eq(transactionsTable.categoryId, budgetCategoriesTable.id))
     .where(conditions.length > 0 ? and(...conditions) : undefined)
     .orderBy(sql`${transactionsTable.date} DESC`, sql`${transactionsTable.createdAt} DESC`);
 
-  if (limit) {
-    query.limit(limit);
-  }
+  const serialized = await serializeTransactionRows(rows);
+  const filtered = categoryId === undefined
+    ? serialized
+    : serialized.filter((txn) =>
+        txn.type === "expense" && txn.splits.some((split) => split.categoryId === categoryId),
+      );
 
-  const txns = await query;
-  res.json(txns.map(serializeTransaction));
+  res.json(limit ? filtered.slice(0, limit) : filtered);
 });
 
 router.post("/transactions", async (req, res): Promise<void> => {
@@ -340,34 +520,55 @@ router.post("/transactions", async (req, res): Promise<void> => {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
+  const type = parsed.data.type ?? "expense";
+  const amount = parsed.data.amount;
+  const merchant = parsed.data.merchant.trim();
+  if (!merchant) {
+    res.status(400).json({ error: "Merchant is required." });
+    return;
+  }
+
+  const normalized = normalizeTransactionParts(type, amount, parsed.data.categoryId ?? null, parsed.data.splits);
+  if ("error" in normalized) {
+    res.status(400).json({ error: normalized.error });
+    return;
+  }
+
   const today = new Date().toISOString().split("T")[0];
-  const [txn] = await db
-    .insert(transactionsTable)
-    .values({
-      amount: String(parsed.data.amount),
-      merchant: parsed.data.merchant,
-      categoryId: parsed.data.categoryId ?? null,
-      date: parsed.data.date ? parsed.data.date.toISOString().slice(0, 10) : today,
-      notes: parsed.data.notes ?? null,
-    })
-    .returning();
+  const txn = await db.transaction(async (tx) => {
+    const [created] = await tx
+      .insert(transactionsTable)
+      .values({
+        transactionType: type,
+        amount: moneyForDb(amount),
+        merchant,
+        categoryId: normalized.categoryId,
+        date: parsed.data.date ? parsed.data.date.toISOString().slice(0, 10) : today,
+        notes: parsed.data.notes ?? null,
+      })
+      .returning();
+
+    if (normalized.splits.length > 0) {
+      await tx.insert(transactionSplitsTable).values(
+        normalized.splits.map((split) => ({
+          transactionId: created.id,
+          categoryId: split.categoryId,
+          amount: moneyForDb(split.amount),
+        })),
+      );
+    }
+
+    return created;
+  });
 
   const [withCat] = await db
-    .select({
-      id: transactionsTable.id,
-      amount: transactionsTable.amount,
-      merchant: transactionsTable.merchant,
-      categoryId: transactionsTable.categoryId,
-      categoryName: budgetCategoriesTable.name,
-      date: transactionsTable.date,
-      notes: transactionsTable.notes,
-      createdAt: transactionsTable.createdAt,
-    })
+    .select(transactionSelectFields())
     .from(transactionsTable)
     .leftJoin(budgetCategoriesTable, eq(transactionsTable.categoryId, budgetCategoriesTable.id))
     .where(eq(transactionsTable.id, txn.id));
 
-  res.status(201).json(serializeTransaction(withCat));
+  const [serialized] = await serializeTransactionRows([withCat]);
+  res.status(201).json(serialized);
 });
 
 router.put("/transactions/:id", async (req, res): Promise<void> => {
@@ -381,27 +582,86 @@ router.put("/transactions/:id", async (req, res): Promise<void> => {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
+
+  const [existing] = await db.select().from(transactionsTable).where(eq(transactionsTable.id, id));
+  if (!existing) {
+    res.status(404).json({ error: "Transaction not found" });
+    return;
+  }
+
   const updates: Record<string, unknown> = {};
   const d = parsed.data;
-  if (d.amount !== undefined) updates.amount = String(d.amount);
-  if (d.merchant !== undefined) updates.merchant = d.merchant;
-  if ("categoryId" in d) updates.categoryId = d.categoryId ?? null;
+  const nextType = normalizeTransactionType(d.type ?? existing.transactionType);
+  const nextAmount = d.amount ?? Number(existing.amount);
+  const touchesBudgetShape =
+    d.type !== undefined || d.amount !== undefined || "categoryId" in d || "splits" in d;
+  let nextSplits: { categoryId: number | null; amount: number }[] | null = null;
+
+  if (touchesBudgetShape) {
+    let splitSource = "splits" in d ? d.splits : undefined;
+
+    if (!("splits" in d) && !("categoryId" in d)) {
+      const existingSplits = (await loadTransactionSplits([id])).get(id) ?? [];
+      splitSource = existingSplits.map((split) => ({
+        categoryId: split.categoryId,
+        amount: split.amount,
+      }));
+
+      if (splitSource.length === 1 && d.amount !== undefined) {
+        splitSource = [{ ...splitSource[0], amount: nextAmount }];
+      }
+    }
+
+    const normalized = normalizeTransactionParts(
+      nextType,
+      nextAmount,
+      "categoryId" in d ? d.categoryId ?? null : existing.categoryId,
+      splitSource,
+    );
+
+    if ("error" in normalized) {
+      res.status(400).json({ error: normalized.error });
+      return;
+    }
+
+    updates.transactionType = nextType;
+    updates.amount = moneyForDb(nextAmount);
+    updates.categoryId = normalized.categoryId;
+    nextSplits = normalized.splits;
+  }
+
+  if (d.merchant !== undefined) {
+    const merchant = d.merchant.trim();
+    if (!merchant) {
+      res.status(400).json({ error: "Merchant is required." });
+      return;
+    }
+    updates.merchant = merchant;
+  }
   if (d.date !== undefined) updates.date = d.date.toISOString().slice(0, 10);
   if ("notes" in d) updates.notes = d.notes ?? null;
 
-  await db.update(transactionsTable).set(updates).where(eq(transactionsTable.id, id));
+  await db.transaction(async (tx) => {
+    if (Object.keys(updates).length > 0) {
+      await tx.update(transactionsTable).set(updates).where(eq(transactionsTable.id, id));
+    }
+
+    if (nextSplits !== null) {
+      await tx.delete(transactionSplitsTable).where(eq(transactionSplitsTable.transactionId, id));
+      if (nextSplits.length > 0) {
+        await tx.insert(transactionSplitsTable).values(
+          nextSplits.map((split) => ({
+            transactionId: id,
+            categoryId: split.categoryId,
+            amount: moneyForDb(split.amount),
+          })),
+        );
+      }
+    }
+  });
 
   const [withCat] = await db
-    .select({
-      id: transactionsTable.id,
-      amount: transactionsTable.amount,
-      merchant: transactionsTable.merchant,
-      categoryId: transactionsTable.categoryId,
-      categoryName: budgetCategoriesTable.name,
-      date: transactionsTable.date,
-      notes: transactionsTable.notes,
-      createdAt: transactionsTable.createdAt,
-    })
+    .select(transactionSelectFields())
     .from(transactionsTable)
     .leftJoin(budgetCategoriesTable, eq(transactionsTable.categoryId, budgetCategoriesTable.id))
     .where(eq(transactionsTable.id, id));
@@ -410,7 +670,8 @@ router.put("/transactions/:id", async (req, res): Promise<void> => {
     res.status(404).json({ error: "Transaction not found" });
     return;
   }
-  res.json(serializeTransaction(withCat));
+  const [serialized] = await serializeTransactionRows([withCat]);
+  res.json(serialized);
 });
 
 router.delete("/transactions/:id", async (req, res): Promise<void> => {
@@ -468,6 +729,7 @@ async function computeRollovers(
     .select()
     .from(transactionsTable)
     .where(sql`${transactionsTable.date} < ${cutoff}`);
+  const priorSpendingEntries = await buildSpendingEntries(priorTxns);
 
   const rollovers = new Map<number, number>();
 
@@ -480,9 +742,9 @@ async function computeRollovers(
     for (const b of catBudgets) {
       const ms = String(b.month).padStart(2, "0");
       const prefix = `${b.year}-${ms}`;
-      const spent = priorTxns
-        .filter((t) => t.categoryId === cat.id && t.date.startsWith(prefix))
-        .reduce((sum, t) => sum + Number(t.amount), 0);
+      const spent = priorSpendingEntries
+        .filter((entry) => entry.categoryId === cat.id && entry.date.startsWith(prefix))
+        .reduce((sum, entry) => sum + entry.amount, 0);
       const available = Number(b.budgetAmount) + runningLeft;
       runningLeft = available - spent;
     }
@@ -520,6 +782,10 @@ router.get("/budget/dashboard", async (req, res): Promise<void> => {
     .select()
     .from(transactionsTable)
     .where(sql`${transactionsTable.date} LIKE ${prefix + "%"}`);
+  const spendingEntries = await buildSpendingEntries(txns);
+  const incomeTransactionsTotal = txns
+    .filter((txn) => normalizeTransactionType(txn.transactionType) === "income")
+    .reduce((sum, txn) => sum + Number(txn.amount), 0);
 
   const [monthlyIncome] = await db
     .select()
@@ -532,9 +798,9 @@ router.get("/budget/dashboard", async (req, res): Promise<void> => {
   const lines = categories.map((cat) => {
     const budgetEntry = monthlyBudgets.find((b) => b.categoryId === cat.id);
     const budgeted = Number(budgetEntry?.budgetAmount ?? 0);
-    const spent = txns
-      .filter((t) => t.categoryId === cat.id)
-      .reduce((sum, t) => sum + Number(t.amount), 0);
+    const spent = spendingEntries
+      .filter((entry) => entry.categoryId === cat.id)
+      .reduce((sum, entry) => sum + entry.amount, 0);
 
     const rollover = rollovers.get(cat.id) ?? 0;
     const available = budgeted + rollover;
@@ -555,23 +821,14 @@ router.get("/budget/dashboard", async (req, res): Promise<void> => {
   const totalBudgeted = lines.reduce((s, l) => s + l.budgeted, 0);
   const totalRollover = lines.reduce((s, l) => s + l.rollover, 0);
   const totalAvailable = lines.reduce((s, l) => s + l.available, 0);
-  const totalSpent = lines.reduce((s, l) => s + l.spent, 0);
-  const totalLeft = lines.reduce((s, l) => s + l.left, 0);
+  const totalSpent = spendingEntries.reduce((s, entry) => s + entry.amount, 0);
+  const totalLeft = totalAvailable - totalSpent;
   const incomeAmount = Number(monthlyIncome?.amount ?? 0);
   const incomeRemaining = incomeAmount - totalSpent;
   const budgetOverUnder = incomeAmount - totalBudgeted;
 
   const recentTxns = await db
-    .select({
-      id: transactionsTable.id,
-      amount: transactionsTable.amount,
-      merchant: transactionsTable.merchant,
-      categoryId: transactionsTable.categoryId,
-      categoryName: budgetCategoriesTable.name,
-      date: transactionsTable.date,
-      notes: transactionsTable.notes,
-      createdAt: transactionsTable.createdAt,
-    })
+    .select(transactionSelectFields())
     .from(transactionsTable)
     .leftJoin(budgetCategoriesTable, eq(transactionsTable.categoryId, budgetCategoriesTable.id))
     .where(sql`${transactionsTable.date} LIKE ${prefix + "%"}`)
@@ -587,10 +844,11 @@ router.get("/budget/dashboard", async (req, res): Promise<void> => {
     totalSpent,
     totalLeft,
     incomeAmount,
+    incomeTransactionsTotal,
     incomeRemaining,
     budgetOverUnder,
     categories: lines,
-    recentTransactions: recentTxns.map(serializeTransaction),
+    recentTransactions: await serializeTransactionRows(recentTxns),
   });
 });
 
@@ -618,6 +876,7 @@ router.get("/budget/annual", async (req, res): Promise<void> => {
     .select()
     .from(transactionsTable)
     .where(sql`${transactionsTable.date} LIKE ${String(year) + "-%"}`);
+  const yearSpendingEntries = await buildSpendingEntries(yearTxns);
 
   const catRows = categories.map((cat) => {
     const monthlyData = Array.from({ length: 12 }, (_, i) => {
@@ -625,9 +884,9 @@ router.get("/budget/annual", async (req, res): Promise<void> => {
       const budgetEntry = yearBudgets.find((b) => b.categoryId === cat.id && b.month === m);
       const budgeted = Number(budgetEntry?.budgetAmount ?? 0);
       const monthStr = String(m).padStart(2, "0");
-      const spent = yearTxns
-        .filter((t) => t.categoryId === cat.id && t.date.startsWith(`${year}-${monthStr}`))
-        .reduce((s, t) => s + Number(t.amount), 0);
+      const spent = yearSpendingEntries
+        .filter((entry) => entry.categoryId === cat.id && entry.date.startsWith(`${year}-${monthStr}`))
+        .reduce((s, entry) => s + entry.amount, 0);
       return { month: m, budgeted, spent };
     });
 
@@ -690,6 +949,10 @@ router.get("/home/snapshot", async (_req, res): Promise<void> => {
   const txns = await db.select().from(transactionsTable).where(
     sql`${transactionsTable.date} LIKE ${prefix + "%"}`,
   );
+  const spendingEntries = await buildSpendingEntries(txns);
+  const incomeTransactionsTotal = txns
+    .filter((txn) => normalizeTransactionType(txn.transactionType) === "income")
+    .reduce((sum, txn) => sum + Number(txn.amount), 0);
   const [monthlyIncome] = await db
     .select()
     .from(monthlyIncomeTable)
@@ -698,23 +961,14 @@ router.get("/home/snapshot", async (_req, res): Promise<void> => {
   const snapshotRollovers = await computeRollovers(categories, year, month);
   const totalBudgeted = budgets.reduce((s, b) => s + Number(b.budgetAmount), 0);
   const totalRollover = Array.from(snapshotRollovers.values()).reduce((s, v) => s + v, 0);
-  const totalSpent = txns.reduce((s, t) => s + Number(t.amount), 0);
+  const totalSpent = spendingEntries.reduce((s, entry) => s + entry.amount, 0);
   const totalAvailable = totalBudgeted + totalRollover;
   const totalLeft = totalAvailable - totalSpent;
   const incomeAmount = Number(monthlyIncome?.amount ?? 0);
 
   // Recent transactions
   const recentTxns = await db
-    .select({
-      id: transactionsTable.id,
-      amount: transactionsTable.amount,
-      merchant: transactionsTable.merchant,
-      categoryId: transactionsTable.categoryId,
-      categoryName: budgetCategoriesTable.name,
-      date: transactionsTable.date,
-      notes: transactionsTable.notes,
-      createdAt: transactionsTable.createdAt,
-    })
+    .select(transactionSelectFields())
     .from(transactionsTable)
     .leftJoin(budgetCategoriesTable, eq(transactionsTable.categoryId, budgetCategoriesTable.id))
     .where(sql`${transactionsTable.date} LIKE ${prefix + "%"}`)
@@ -734,16 +988,18 @@ router.get("/home/snapshot", async (_req, res): Promise<void> => {
       totalSpent,
       totalLeft,
       incomeAmount,
+      incomeTransactionsTotal,
       incomeRemaining: incomeAmount - totalSpent,
       month,
       year,
     },
-    recentTransactions: recentTxns.map(serializeTransaction),
+    recentTransactions: await serializeTransactionRows(recentTxns),
   });
 });
 
 function serializeTransaction(t: {
   id: number;
+  transactionType: string;
   amount: string | number;
   merchant: string;
   categoryId: number | null;
@@ -751,13 +1007,34 @@ function serializeTransaction(t: {
   date: string;
   notes: string | null;
   createdAt: Date;
-}) {
+}, splitRows: SerializedTransactionSplit[] = []) {
+  const type = normalizeTransactionType(t.transactionType);
+  const splits = type === "expense"
+    ? splitRows.length > 0
+      ? splitRows
+      : [{
+          id: null,
+          categoryId: t.categoryId ?? null,
+          categoryName: t.categoryName ?? null,
+          amount: Number(t.amount),
+        }]
+    : [];
+  const primarySplit = splits.length === 1 ? splits[0] : null;
+
   return {
     id: t.id,
+    type,
     amount: Number(t.amount),
     merchant: t.merchant,
-    categoryId: t.categoryId ?? null,
-    categoryName: t.categoryName ?? null,
+    categoryId: type === "expense" ? primarySplit?.categoryId ?? null : null,
+    categoryName: type === "income"
+      ? "Income"
+      : primarySplit
+      ? primarySplit.categoryName
+      : splits.length > 1
+      ? "Split transaction"
+      : t.categoryName ?? null,
+    splits,
     date: t.date,
     notes: t.notes ?? null,
     createdAt: t.createdAt.toISOString(),

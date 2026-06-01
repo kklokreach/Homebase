@@ -120,29 +120,44 @@ export interface UpsertMonthlyBudgetBody {
   budgetAmount: number;
 }
 
+export type TransactionType = "expense" | "income";
+
+export interface TransactionSplit {
+  id?: number | null;
+  categoryId?: number | null;
+  categoryName?: string | null;
+  amount: number;
+}
+
 export interface Transaction {
   id: number;
+  type: TransactionType;
   amount: number;
   merchant: string;
   categoryId?: number | null;
   categoryName?: string | null;
+  splits: TransactionSplit[];
   date: string;
   notes?: string | null;
   createdAt: string;
 }
 
 export interface CreateTransactionBody {
+  type?: TransactionType;
   amount: number;
   merchant: string;
   categoryId?: number | null;
+  splits?: Pick<TransactionSplit, "categoryId" | "amount">[];
   date?: string | null;
   notes?: string | null;
 }
 
 export interface UpdateTransactionBody {
+  type?: TransactionType;
   amount?: number;
   merchant?: string;
   categoryId?: number | null;
+  splits?: Pick<TransactionSplit, "categoryId" | "amount">[];
   date?: string;
   notes?: string | null;
 }
@@ -167,6 +182,7 @@ export interface BudgetDashboard {
   totalSpent: number;
   totalLeft: number;
   incomeAmount?: number;
+  incomeTransactionsTotal?: number;
   incomeRemaining?: number;
   budgetOverUnder?: number;
   categories: BudgetCategoryLine[];
@@ -199,6 +215,7 @@ export type HomeSnapshotBudgetSnapshot = {
   totalSpent: number;
   totalLeft: number;
   incomeAmount?: number;
+  incomeTransactionsTotal?: number;
   incomeRemaining?: number;
   month: number;
   year: number;

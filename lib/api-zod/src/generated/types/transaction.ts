@@ -8,10 +8,17 @@
 
 export interface Transaction {
   id: number;
+  type: "expense" | "income";
   amount: number;
   merchant: string;
   categoryId?: number | null;
   categoryName?: string | null;
+  splits: {
+    id?: number | null;
+    categoryId?: number | null;
+    categoryName?: string | null;
+    amount: number;
+  }[];
   date: Date;
   notes?: string | null;
   createdAt: Date;
