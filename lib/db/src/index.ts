@@ -64,6 +64,29 @@ export async function ensureSchema() {
 
     CREATE UNIQUE INDEX IF NOT EXISTS weekly_plans_plan_date_unique
       ON weekly_plans (plan_date);
+
+    DO $$
+    DECLARE
+      app_table text;
+    BEGIN
+      FOREACH app_table IN ARRAY ARRAY[
+        'budget_categories',
+        'monthly_budgets',
+        'monthly_income',
+        'transactions',
+        'transaction_splits',
+        'reserve_funds',
+        'reserve_transactions',
+        'monthly_reviews',
+        'monthly_review_account_snapshots',
+        'tasks',
+        'notes',
+        'weekly_plans'
+      ]
+      LOOP
+        EXECUTE format('ALTER TABLE IF EXISTS public.%I ENABLE ROW LEVEL SECURITY', app_table);
+      END LOOP;
+    END $$;
   `);
 }
 
