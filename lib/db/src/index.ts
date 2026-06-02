@@ -67,24 +67,18 @@ export async function ensureSchema() {
 
     DO $$
     DECLARE
-      app_table text;
+      public_table record;
     BEGIN
-      FOREACH app_table IN ARRAY ARRAY[
-        'budget_categories',
-        'monthly_budgets',
-        'monthly_income',
-        'transactions',
-        'transaction_splits',
-        'reserve_funds',
-        'reserve_transactions',
-        'monthly_reviews',
-        'monthly_review_account_snapshots',
-        'tasks',
-        'notes',
-        'weekly_plans'
-      ]
+      FOR public_table IN
+        SELECT schemaname, tablename
+        FROM pg_tables
+        WHERE schemaname = 'public'
       LOOP
-        EXECUTE format('ALTER TABLE IF EXISTS public.%I ENABLE ROW LEVEL SECURITY', app_table);
+        EXECUTE format(
+          'ALTER TABLE IF EXISTS %I.%I ENABLE ROW LEVEL SECURITY',
+          public_table.schemaname,
+          public_table.tablename
+        );
       END LOOP;
     END $$;
   `);
