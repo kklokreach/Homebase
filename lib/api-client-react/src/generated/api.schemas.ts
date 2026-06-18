@@ -111,6 +111,7 @@ export interface MonthlyBudget {
   year: number;
   month: number;
   budgetAmount: number;
+  rolloverApplied?: boolean;
 }
 
 export interface UpsertMonthlyBudgetBody {

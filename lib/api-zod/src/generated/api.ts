@@ -365,6 +365,7 @@ export const ListMonthlyBudgetsResponseItem = zod.object({
   year: zod.number(),
   month: zod.number(),
   budgetAmount: zod.number(),
+  rolloverApplied: zod.boolean().optional(),
 });
 export const ListMonthlyBudgetsResponse = zod.array(
   ListMonthlyBudgetsResponseItem,
@@ -386,6 +387,7 @@ export const UpsertMonthlyBudgetResponse = zod.object({
   year: zod.number(),
   month: zod.number(),
   budgetAmount: zod.number(),
+  rolloverApplied: zod.boolean().optional(),
 });
 
 /**

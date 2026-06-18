@@ -900,6 +900,8 @@ components:
           type: integer
         budgetAmount:
           type: number
+        rolloverApplied:
+          type: boolean
       required: [id, categoryId, year, month, budgetAmount]
 
     UpsertMonthlyBudgetBody:

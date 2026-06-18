@@ -21,6 +21,9 @@ export async function ensureSchema() {
     ALTER TABLE budget_categories
       ADD COLUMN IF NOT EXISTS group_name text;
 
+    ALTER TABLE monthly_budgets
+      ADD COLUMN IF NOT EXISTS rollover_applied boolean NOT NULL DEFAULT false;
+
     CREATE TABLE IF NOT EXISTS transaction_splits (
       id serial PRIMARY KEY,
       transaction_id integer NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,

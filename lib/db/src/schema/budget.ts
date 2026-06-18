@@ -1,4 +1,4 @@
-import { pgTable, text, serial, integer, numeric, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
+import { boolean, pgTable, text, serial, integer, numeric, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -17,6 +17,7 @@ export const monthlyBudgetsTable = pgTable("monthly_budgets", {
   year: integer("year").notNull(),
   month: integer("month").notNull(),
   budgetAmount: numeric("budget_amount", { precision: 10, scale: 2 }).notNull().default("0"),
+  rolloverApplied: boolean("rollover_applied").notNull().default(false),
 });
 
 export const monthlyIncomeTable = pgTable(

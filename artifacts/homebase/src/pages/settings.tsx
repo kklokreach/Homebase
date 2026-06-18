@@ -92,6 +92,14 @@ function money(n: number) {
   });
 }
 
+function cleanSignedMoneyInput(value: string) {
+  const negative = value.trimStart().startsWith("-");
+  const cleaned = value.replace(/[^0-9.]/g, "");
+  const [first, ...rest] = cleaned.split(".");
+  const amount = rest.length === 0 ? first : `${first}.${rest.join("")}`;
+  return negative ? `-${amount}` : amount;
+}
+
 function groupLabel(groupName?: string | null) {
   return groupName?.trim() || "Ungrouped";
 }
@@ -625,7 +633,7 @@ export default function Settings() {
                               onChange={(e) =>
                                 setBudgetDrafts((prev) => ({
                                   ...prev,
-                                  [cat.id]: e.target.value.replace(/[^0-9.]/g, ""),
+                                  [cat.id]: cleanSignedMoneyInput(e.target.value),
                                 }))
                               }
                               placeholder="0.00"

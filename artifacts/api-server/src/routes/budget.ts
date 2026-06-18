@@ -26,6 +26,7 @@ import {
 } from "@workspace/api-zod";
 
 const router: IRouter = Router();
+const MONTHLY_BUDGET_SEED_LOCK_NAMESPACE = 705912;
 
 type TransactionType = "expense" | "income";
 
@@ -59,9 +60,33 @@ type SpendingEntry = {
   date: string;
 };
 
+type MonthlyBudgetRow = {
+  id: number;
+  categoryId: number;
+  year: number;
+  month: number;
+  budgetAmount: string | number;
+  rolloverApplied: boolean;
+};
+
 function currentYearMonth() {
   const now = new Date();
   return { year: now.getFullYear(), month: now.getMonth() + 1 };
+}
+
+function monthKey(year: number, month: number) {
+  return year * 12 + month;
+}
+
+function previousYearMonth(year: number, month: number) {
+  return month === 1
+    ? { year: year - 1, month: 12 }
+    : { year, month: month - 1 };
+}
+
+function isCurrentMonth(year: number, month: number) {
+  const current = currentYearMonth();
+  return year === current.year && month === current.month;
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -261,6 +286,124 @@ async function buildSpendingEntries(
   return entries;
 }
 
+function computeRolloversFromRows(
+  categories: { id: number }[],
+  priorBudgets: MonthlyBudgetRow[],
+  priorSpendingEntries: SpendingEntry[],
+  year: number,
+  month: number,
+) {
+  const rollovers = new Map<number, number>();
+  const cutoff = monthKey(year, month);
+
+  for (const cat of categories) {
+    const catBudgets = priorBudgets
+      .filter((budget) => budget.categoryId === cat.id && monthKey(budget.year, budget.month) < cutoff)
+      .sort((a, b) => monthKey(a.year, a.month) - monthKey(b.year, b.month));
+
+    let runningLeft = 0;
+    for (const budget of catBudgets) {
+      const prefix = `${budget.year}-${String(budget.month).padStart(2, "0")}`;
+      const spent = priorSpendingEntries
+        .filter((entry) => entry.categoryId === cat.id && entry.date.startsWith(prefix))
+        .reduce((sum, entry) => sum + entry.amount, 0);
+      const available = budget.rolloverApplied
+        ? Number(budget.budgetAmount)
+        : Number(budget.budgetAmount) + runningLeft;
+      runningLeft = available - spent;
+    }
+
+    rollovers.set(cat.id, runningLeft);
+  }
+
+  return rollovers;
+}
+
+async function ensureMonthlyBudgetRows(
+  categories: { id: number }[],
+  year: number,
+  month: number,
+) {
+  if (!isCurrentMonth(year, month) || categories.length === 0) return;
+
+  await db.transaction(async (tx) => {
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(${MONTHLY_BUDGET_SEED_LOCK_NAMESPACE}, ${monthKey(year, month)})`);
+
+    const existingCurrentBudgets = await tx
+      .select()
+      .from(monthlyBudgetsTable)
+      .where(and(eq(monthlyBudgetsTable.year, year), eq(monthlyBudgetsTable.month, month)));
+    const unappliedCurrentBudgets = existingCurrentBudgets.filter((budget) => !budget.rolloverApplied);
+    const existingCategoryIds = new Set(existingCurrentBudgets.map((budget) => budget.categoryId));
+    const missingCategories = categories.filter((category) => !existingCategoryIds.has(category.id));
+    if (missingCategories.length === 0 && unappliedCurrentBudgets.length === 0) return;
+
+    const previousMonth = previousYearMonth(year, month);
+    const previousBudgets = await tx
+      .select()
+      .from(monthlyBudgetsTable)
+      .where(and(eq(monthlyBudgetsTable.year, previousMonth.year), eq(monthlyBudgetsTable.month, previousMonth.month)));
+
+    const monthStr = String(month).padStart(2, "0");
+    const cutoff = `${year}-${monthStr}`;
+    const priorTxns = await tx
+      .select()
+      .from(transactionsTable)
+      .where(sql`${transactionsTable.date} < ${cutoff}`);
+    const priorSpendingEntries = await buildSpendingEntries(priorTxns);
+
+    const priorBudgets = await tx
+      .select()
+      .from(monthlyBudgetsTable)
+      .where(
+        or(
+          lt(monthlyBudgetsTable.year, year),
+          and(
+            eq(monthlyBudgetsTable.year, year),
+            lt(monthlyBudgetsTable.month, month),
+          ),
+        ),
+      );
+    if (priorBudgets.length === 0) return;
+
+    const currentRollovers = computeRolloversFromRows(
+      categories,
+      priorBudgets,
+      priorSpendingEntries,
+      year,
+      month,
+    );
+
+    for (const budget of unappliedCurrentBudgets) {
+      const nextBudgetAmount = Number(budget.budgetAmount) + (currentRollovers.get(budget.categoryId) ?? 0);
+      await tx
+        .update(monthlyBudgetsTable)
+        .set({ budgetAmount: moneyForDb(nextBudgetAmount), rolloverApplied: true })
+        .where(eq(monthlyBudgetsTable.id, budget.id));
+    }
+
+    const values = missingCategories.flatMap((category) => {
+      const previousBudget = previousBudgets.find((budget) => budget.categoryId === category.id);
+      if (!previousBudget) return [];
+
+      const previousLeft = currentRollovers.get(category.id) ?? 0;
+      const nextBudgetAmount = Number(previousBudget.budgetAmount) + previousLeft;
+
+      return [{
+        categoryId: category.id,
+        year,
+        month,
+        budgetAmount: moneyForDb(nextBudgetAmount),
+        rolloverApplied: true,
+      }];
+    });
+
+    if (values.length > 0) {
+      await tx.insert(monthlyBudgetsTable).values(values);
+    }
+  });
+}
+
 // ── Budget Categories ─────────────────────────────────────────────────────
 
 router.get("/budget/categories", async (_req, res): Promise<void> => {
@@ -379,6 +522,10 @@ router.get("/budget/monthly", async (req, res): Promise<void> => {
   const conditions = [];
   if (year) conditions.push(eq(monthlyBudgetsTable.year, year));
   if (month) conditions.push(eq(monthlyBudgetsTable.month, month));
+  if (year && month) {
+    const categories = await db.select({ id: budgetCategoriesTable.id }).from(budgetCategoriesTable);
+    await ensureMonthlyBudgetRows(categories, year, month);
+  }
 
   const budgets = await db
     .select()
@@ -730,29 +877,7 @@ async function computeRollovers(
     .from(transactionsTable)
     .where(sql`${transactionsTable.date} < ${cutoff}`);
   const priorSpendingEntries = await buildSpendingEntries(priorTxns);
-
-  const rollovers = new Map<number, number>();
-
-  for (const cat of categories) {
-    const catBudgets = priorBudgets
-      .filter((b) => b.categoryId === cat.id)
-      .sort((a, b) => a.year !== b.year ? a.year - b.year : a.month - b.month);
-
-    let runningLeft = 0;
-    for (const b of catBudgets) {
-      const ms = String(b.month).padStart(2, "0");
-      const prefix = `${b.year}-${ms}`;
-      const spent = priorSpendingEntries
-        .filter((entry) => entry.categoryId === cat.id && entry.date.startsWith(prefix))
-        .reduce((sum, entry) => sum + entry.amount, 0);
-      const available = Number(b.budgetAmount) + runningLeft;
-      runningLeft = available - spent;
-    }
-
-    rollovers.set(cat.id, runningLeft);
-  }
-
-  return rollovers;
+  return computeRolloversFromRows(categories, priorBudgets, priorSpendingEntries, year, month);
 }
 
 router.get("/budget/dashboard", async (req, res): Promise<void> => {
@@ -768,6 +893,8 @@ router.get("/budget/dashboard", async (req, res): Promise<void> => {
     .select()
     .from(budgetCategoriesTable)
     .orderBy(budgetCategoriesTable.sortOrder, budgetCategoriesTable.name);
+
+  await ensureMonthlyBudgetRows(categories, year, month);
 
   const monthlyBudgets = await db
     .select()
@@ -802,7 +929,7 @@ router.get("/budget/dashboard", async (req, res): Promise<void> => {
       .filter((entry) => entry.categoryId === cat.id)
       .reduce((sum, entry) => sum + entry.amount, 0);
 
-    const rollover = rollovers.get(cat.id) ?? 0;
+    const rollover = budgetEntry?.rolloverApplied ? 0 : rollovers.get(cat.id) ?? 0;
     const available = budgeted + rollover;
     const left = available - spent;
 
@@ -943,6 +1070,7 @@ router.get("/home/snapshot", async (_req, res): Promise<void> => {
   const prefix = `${year}-${monthStr}`;
 
   const categories = await db.select().from(budgetCategoriesTable);
+  await ensureMonthlyBudgetRows(categories, year, month);
   const budgets = await db.select().from(monthlyBudgetsTable).where(
     and(eq(monthlyBudgetsTable.year, year), eq(monthlyBudgetsTable.month, month)),
   );
@@ -960,7 +1088,10 @@ router.get("/home/snapshot", async (_req, res): Promise<void> => {
 
   const snapshotRollovers = await computeRollovers(categories, year, month);
   const totalBudgeted = budgets.reduce((s, b) => s + Number(b.budgetAmount), 0);
-  const totalRollover = Array.from(snapshotRollovers.values()).reduce((s, v) => s + v, 0);
+  const totalRollover = categories.reduce((sum, category) => {
+    const budget = budgets.find((item) => item.categoryId === category.id);
+    return sum + (budget?.rolloverApplied ? 0 : snapshotRollovers.get(category.id) ?? 0);
+  }, 0);
   const totalSpent = spendingEntries.reduce((s, entry) => s + entry.amount, 0);
   const totalAvailable = totalBudgeted + totalRollover;
   const totalLeft = totalAvailable - totalSpent;
