@@ -141,6 +141,20 @@ function moneyForDb(amount: number) {
   return (toCents(amount) / 100).toFixed(2);
 }
 
+function moneyForApi(amount: number) {
+  return toCents(amount) / 100;
+}
+
+function baseBudgetAmount(
+  budget: Pick<MonthlyBudgetRow, "budgetAmount" | "rolloverApplied"> | undefined,
+  rollover: number,
+) {
+  if (!budget) return 0;
+  const amount = Number(budget.budgetAmount);
+  // Legacy rows marked rolloverApplied stored available amount, not base budget.
+  return moneyForApi(budget.rolloverApplied ? amount - rollover : amount);
+}
+
 function normalizeCategoryId(value: number | null | undefined) {
   if (value == null) return null;
   if (!Number.isInteger(value) || value <= 0) return { error: "Category ids must be positive integers." };
@@ -307,10 +321,9 @@ function computeRolloversFromRows(
       const spent = priorSpendingEntries
         .filter((entry) => entry.categoryId === cat.id && entry.date.startsWith(prefix))
         .reduce((sum, entry) => sum + entry.amount, 0);
-      const available = budget.rolloverApplied
-        ? Number(budget.budgetAmount)
-        : Number(budget.budgetAmount) + runningLeft;
-      runningLeft = available - spent;
+      const budgeted = baseBudgetAmount(budget, runningLeft);
+      const available = budgeted + runningLeft;
+      runningLeft = moneyForApi(available - spent);
     }
 
     rollovers.set(cat.id, runningLeft);
@@ -333,16 +346,16 @@ async function ensureMonthlyBudgetRows(
       .select()
       .from(monthlyBudgetsTable)
       .where(and(eq(monthlyBudgetsTable.year, year), eq(monthlyBudgetsTable.month, month)));
-    const unappliedCurrentBudgets = existingCurrentBudgets.filter((budget) => !budget.rolloverApplied);
     const existingCategoryIds = new Set(existingCurrentBudgets.map((budget) => budget.categoryId));
     const missingCategories = categories.filter((category) => !existingCategoryIds.has(category.id));
-    if (missingCategories.length === 0 && unappliedCurrentBudgets.length === 0) return;
+    if (missingCategories.length === 0) return;
 
     const previousMonth = previousYearMonth(year, month);
     const previousBudgets = await tx
       .select()
       .from(monthlyBudgetsTable)
       .where(and(eq(monthlyBudgetsTable.year, previousMonth.year), eq(monthlyBudgetsTable.month, previousMonth.month)));
+    if (previousBudgets.length === 0) return;
 
     const monthStr = String(month).padStart(2, "0");
     const cutoff = `${year}-${monthStr}`;
@@ -366,35 +379,29 @@ async function ensureMonthlyBudgetRows(
       );
     if (priorBudgets.length === 0) return;
 
-    const currentRollovers = computeRolloversFromRows(
+    const previousRollovers = computeRolloversFromRows(
       categories,
       priorBudgets,
       priorSpendingEntries,
-      year,
-      month,
+      previousMonth.year,
+      previousMonth.month,
     );
-
-    for (const budget of unappliedCurrentBudgets) {
-      const nextBudgetAmount = Number(budget.budgetAmount) + (currentRollovers.get(budget.categoryId) ?? 0);
-      await tx
-        .update(monthlyBudgetsTable)
-        .set({ budgetAmount: moneyForDb(nextBudgetAmount), rolloverApplied: true })
-        .where(eq(monthlyBudgetsTable.id, budget.id));
-    }
 
     const values = missingCategories.flatMap((category) => {
       const previousBudget = previousBudgets.find((budget) => budget.categoryId === category.id);
       if (!previousBudget) return [];
 
-      const previousLeft = currentRollovers.get(category.id) ?? 0;
-      const nextBudgetAmount = Number(previousBudget.budgetAmount) + previousLeft;
+      const nextBudgetAmount = baseBudgetAmount(
+        previousBudget,
+        previousRollovers.get(category.id) ?? 0,
+      );
 
       return [{
         categoryId: category.id,
         year,
         month,
         budgetAmount: moneyForDb(nextBudgetAmount),
-        rolloverApplied: true,
+        rolloverApplied: false,
       }];
     });
 
@@ -532,7 +539,20 @@ router.get("/budget/monthly", async (req, res): Promise<void> => {
     .from(monthlyBudgetsTable)
     .where(conditions.length > 0 ? and(...conditions) : undefined);
 
-  res.json(budgets.map((b) => ({ ...b, budgetAmount: Number(b.budgetAmount) })));
+  if (year && month) {
+    const categories = await db.select({ id: budgetCategoriesTable.id }).from(budgetCategoriesTable);
+    const rollovers = await computeRollovers(categories, year, month);
+    res.json(budgets.map((b) => ({
+      ...b,
+      budgetAmount: baseBudgetAmount(b, rollovers.get(b.categoryId) ?? 0),
+    })));
+    return;
+  }
+
+  res.json(budgets.map((b) => ({
+    ...b,
+    budgetAmount: Number(b.budgetAmount),
+  })));
 });
 
 router.post("/budget/monthly", async (req, res): Promise<void> => {
@@ -558,19 +578,25 @@ router.post("/budget/monthly", async (req, res): Promise<void> => {
   if (existing.length > 0) {
     const [updated] = await db
       .update(monthlyBudgetsTable)
-      .set({ budgetAmount: String(budgetAmount) })
+      .set({ budgetAmount: moneyForDb(budgetAmount), rolloverApplied: false })
       .where(eq(monthlyBudgetsTable.id, existing[0].id))
       .returning();
     result = updated;
   } else {
     const [inserted] = await db
       .insert(monthlyBudgetsTable)
-      .values({ categoryId, year, month, budgetAmount: String(budgetAmount) })
+      .values({
+        categoryId,
+        year,
+        month,
+        budgetAmount: moneyForDb(budgetAmount),
+        rolloverApplied: false,
+      })
       .returning();
     result = inserted;
   }
 
-  res.json({ ...result, budgetAmount: Number(result.budgetAmount) });
+  res.json({ ...result, budgetAmount: moneyForApi(budgetAmount), rolloverApplied: false });
 });
 
 // ── Transactions ──────────────────────────────────────────────────────────
@@ -924,14 +950,14 @@ router.get("/budget/dashboard", async (req, res): Promise<void> => {
 
   const lines = categories.map((cat) => {
     const budgetEntry = monthlyBudgets.find((b) => b.categoryId === cat.id);
-    const budgeted = Number(budgetEntry?.budgetAmount ?? 0);
+    const rollover = rollovers.get(cat.id) ?? 0;
+    const budgeted = baseBudgetAmount(budgetEntry, rollover);
     const spent = spendingEntries
       .filter((entry) => entry.categoryId === cat.id)
       .reduce((sum, entry) => sum + entry.amount, 0);
 
-    const rollover = budgetEntry?.rolloverApplied ? 0 : rollovers.get(cat.id) ?? 0;
-    const available = budgeted + rollover;
-    const left = available - spent;
+    const available = moneyForApi(budgeted + rollover);
+    const left = moneyForApi(available - spent);
 
     return {
       categoryId: cat.id,
@@ -1004,12 +1030,17 @@ router.get("/budget/annual", async (req, res): Promise<void> => {
     .from(transactionsTable)
     .where(sql`${transactionsTable.date} LIKE ${String(year) + "-%"}`);
   const yearSpendingEntries = await buildSpendingEntries(yearTxns);
+  const rolloversByMonth = new Map<number, Map<number, number>>();
+  for (let monthIndex = 1; monthIndex <= 12; monthIndex += 1) {
+    rolloversByMonth.set(monthIndex, await computeRollovers(categories, year, monthIndex));
+  }
 
   const catRows = categories.map((cat) => {
     const monthlyData = Array.from({ length: 12 }, (_, i) => {
       const m = i + 1;
       const budgetEntry = yearBudgets.find((b) => b.categoryId === cat.id && b.month === m);
-      const budgeted = Number(budgetEntry?.budgetAmount ?? 0);
+      const rollover = rolloversByMonth.get(m)?.get(cat.id) ?? 0;
+      const budgeted = baseBudgetAmount(budgetEntry, rollover);
       const monthStr = String(m).padStart(2, "0");
       const spent = yearSpendingEntries
         .filter((entry) => entry.categoryId === cat.id && entry.date.startsWith(`${year}-${monthStr}`))
@@ -1087,14 +1118,16 @@ router.get("/home/snapshot", async (_req, res): Promise<void> => {
     .where(and(eq(monthlyIncomeTable.year, year), eq(monthlyIncomeTable.month, month)));
 
   const snapshotRollovers = await computeRollovers(categories, year, month);
-  const totalBudgeted = budgets.reduce((s, b) => s + Number(b.budgetAmount), 0);
-  const totalRollover = categories.reduce((sum, category) => {
-    const budget = budgets.find((item) => item.categoryId === category.id);
-    return sum + (budget?.rolloverApplied ? 0 : snapshotRollovers.get(category.id) ?? 0);
-  }, 0);
+  const totalBudgeted = budgets.reduce((sum, budget) => (
+    sum + baseBudgetAmount(budget, snapshotRollovers.get(budget.categoryId) ?? 0)
+  ), 0);
+  const totalRollover = categories.reduce(
+    (sum, category) => sum + (snapshotRollovers.get(category.id) ?? 0),
+    0,
+  );
   const totalSpent = spendingEntries.reduce((s, entry) => s + entry.amount, 0);
-  const totalAvailable = totalBudgeted + totalRollover;
-  const totalLeft = totalAvailable - totalSpent;
+  const totalAvailable = moneyForApi(totalBudgeted + totalRollover);
+  const totalLeft = moneyForApi(totalAvailable - totalSpent);
   const incomeAmount = Number(monthlyIncome?.amount ?? 0);
 
   // Recent transactions

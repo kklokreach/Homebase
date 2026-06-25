@@ -57,6 +57,7 @@ type CategoryGroup = {
   label: string;
   categories: BudgetCategory[];
   budgeted: number;
+  rollover: number;
   available: number;
   spent: number;
   left: number;
@@ -185,6 +186,7 @@ export default function Settings() {
           label,
           categories: [],
           budgeted: 0,
+          rollover: 0,
           available: 0,
           spent: 0,
           left: 0,
@@ -196,6 +198,7 @@ export default function Settings() {
 
       group.categories.push(cat);
       group.budgeted += row?.budgeted ?? 0;
+      group.rollover += row?.rollover ?? 0;
       group.available += row?.available ?? 0;
       group.spent += row?.spent ?? 0;
       group.left += row?.left ?? 0;
@@ -493,8 +496,9 @@ export default function Settings() {
                     <div className="min-w-0">
                       <div className="font-medium">{group.label}</div>
                       <div className="text-xs text-muted-foreground">
-                        {group.categories.length} categor{group.categories.length === 1 ? "y" : "ies"} / Budgeted{" "}
-                        {money(group.budgeted)} / Available {money(group.available)} / Left {money(group.left)}
+                        {group.categories.length} categor{group.categories.length === 1 ? "y" : "ies"} / Base{" "}
+                        {money(group.budgeted)} / Rollover {money(group.rollover)} / Available{" "}
+                        {money(group.available)} / Left {money(group.left)}
                       </div>
                     </div>
                     <div className="flex shrink-0 gap-2">
@@ -535,8 +539,8 @@ export default function Settings() {
                                 <div className="min-w-0">
                                   <div className="font-medium">{cat.name}</div>
                                   <div className="text-xs text-muted-foreground">
-                                    Available {money(row?.available ?? 0)} / Spent {money(row?.spent ?? 0)} / Left{" "}
-                                    {money(row?.left ?? 0)}
+                                    Base {money(row?.budgeted ?? 0)} / Rollover {money(row?.rollover ?? 0)} / Available{" "}
+                                    {money(row?.available ?? 0)} / Spent {money(row?.spent ?? 0)} / Left {money(row?.left ?? 0)}
                                   </div>
                                 </div>
                                 <div className="flex shrink-0 gap-2">

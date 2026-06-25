@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { and, eq, inArray, lt, sql } from "drizzle-orm";
+import { and, eq, inArray, lt, or, sql } from "drizzle-orm";
 import {
   db,
   budgetCategoriesTable,
@@ -15,13 +15,27 @@ import { isPlainObject, parsePositiveIntParam, sendInvalidId } from "../lib/http
 
 const router: IRouter = Router();
 
+type BudgetSpendingEntry = {
+  categoryId: number | null;
+  amount: number;
+  date: string;
+};
+
+type MonthlyBudgetRow = {
+  categoryId: number;
+  year: number;
+  month: number;
+  budgetAmount: string | number;
+  rolloverApplied: boolean;
+};
+
 function isExpenseTransaction(value: string | null | undefined) {
   return value !== "income";
 }
 
 async function buildBudgetSpendingEntries(
   transactions: { id: number; transactionType: string; categoryId: number | null; amount: string | number; date: string }[],
-) {
+): Promise<BudgetSpendingEntry[]> {
   const expenseTransactions = transactions.filter((transaction) =>
     isExpenseTransaction(transaction.transactionType),
   );
@@ -62,6 +76,88 @@ async function buildBudgetSpendingEntries(
       date: transaction.date,
     }];
   });
+}
+
+function monthKey(year: number, month: number) {
+  return year * 12 + month;
+}
+
+function toCents(amount: number) {
+  return Math.round(amount * 100);
+}
+
+function moneyForApi(amount: number) {
+  return toCents(amount) / 100;
+}
+
+function baseBudgetAmount(
+  budget: Pick<MonthlyBudgetRow, "budgetAmount" | "rolloverApplied"> | undefined,
+  rollover: number,
+) {
+  if (!budget) return 0;
+  const amount = Number(budget.budgetAmount);
+  // Legacy rows marked rolloverApplied stored available amount, not base budget.
+  return moneyForApi(budget.rolloverApplied ? amount - rollover : amount);
+}
+
+function computeBudgetRolloversFromRows(
+  categories: { id: number }[],
+  priorBudgets: MonthlyBudgetRow[],
+  priorSpendingEntries: BudgetSpendingEntry[],
+  year: number,
+  month: number,
+) {
+  const rollovers = new Map<number, number>();
+  const cutoff = monthKey(year, month);
+
+  for (const category of categories) {
+    const categoryBudgets = priorBudgets
+      .filter((budget) => budget.categoryId === category.id && monthKey(budget.year, budget.month) < cutoff)
+      .sort((a, b) => monthKey(a.year, a.month) - monthKey(b.year, b.month));
+
+    let runningLeft = 0;
+    for (const budget of categoryBudgets) {
+      const prefix = `${budget.year}-${String(budget.month).padStart(2, "0")}`;
+      const spent = priorSpendingEntries
+        .filter((entry) => entry.categoryId === category.id && entry.date.startsWith(prefix))
+        .reduce((sum, entry) => sum + entry.amount, 0);
+      const budgeted = baseBudgetAmount(budget, runningLeft);
+      const available = budgeted + runningLeft;
+      runningLeft = moneyForApi(available - spent);
+    }
+
+    rollovers.set(category.id, runningLeft);
+  }
+
+  return rollovers;
+}
+
+async function computeBudgetRollovers(categories: { id: number }[], year: number, month: number) {
+  const priorBudgets = await db
+    .select()
+    .from(monthlyBudgetsTable)
+    .where(
+      or(
+        lt(monthlyBudgetsTable.year, year),
+        and(
+          eq(monthlyBudgetsTable.year, year),
+          lt(monthlyBudgetsTable.month, month),
+        ),
+      ),
+    );
+
+  if (priorBudgets.length === 0) {
+    return new Map(categories.map((category) => [category.id, 0]));
+  }
+
+  const cutoff = `${year}-${String(month).padStart(2, "0")}`;
+  const priorTransactions = await db
+    .select()
+    .from(transactionsTable)
+    .where(sql`${transactionsTable.date} < ${cutoff}`);
+  const priorSpendingEntries = await buildBudgetSpendingEntries(priorTransactions);
+
+  return computeBudgetRolloversFromRows(categories, priorBudgets, priorSpendingEntries, year, month);
 }
 
 function parsePositiveInt(value: unknown, field: string): number | { error: string } {
@@ -157,19 +253,24 @@ async function buildBudgetReview(year: number, month: number) {
     .from(transactionsTable)
     .where(sql`${transactionsTable.date} LIKE ${prefix + "%"}`);
   const spendingEntries = await buildBudgetSpendingEntries(transactions);
+  const rollovers = await computeBudgetRollovers(categories, year, month);
 
   const lines = categories.map((category) => {
     const budgetEntry = monthlyBudgets.find((item) => item.categoryId === category.id);
-    const budgeted = Number(budgetEntry?.budgetAmount ?? 0);
+    const rollover = rollovers.get(category.id) ?? 0;
+    const budgeted = baseBudgetAmount(budgetEntry, rollover);
+    const available = moneyForApi(budgeted + rollover);
     const spent = spendingEntries
       .filter((entry) => entry.categoryId === category.id)
       .reduce((sum, entry) => sum + entry.amount, 0);
-    const left = budgeted - spent;
+    const left = moneyForApi(available - spent);
 
     return {
       categoryId: category.id,
       categoryName: category.name,
       budgeted,
+      rollover,
+      available,
       spent,
       left,
     };
@@ -179,6 +280,8 @@ async function buildBudgetReview(year: number, month: number) {
     year,
     month,
     totalBudgeted: lines.reduce((sum, line) => sum + line.budgeted, 0),
+    totalRollover: lines.reduce((sum, line) => sum + line.rollover, 0),
+    totalAvailable: lines.reduce((sum, line) => sum + line.available, 0),
     totalSpent: lines.reduce((sum, line) => sum + line.spent, 0),
     totalLeft: lines.reduce((sum, line) => sum + line.left, 0),
     overBudgetCount: lines.filter((line) => line.left < 0).length,

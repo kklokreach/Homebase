@@ -20,6 +20,8 @@ type BudgetReviewCategory = {
   categoryId: number;
   categoryName: string;
   budgeted: number;
+  rollover: number;
+  available: number;
   spent: number;
   left: number;
 };
@@ -28,6 +30,8 @@ type BudgetReview = {
   year: number;
   month: number;
   totalBudgeted: number;
+  totalRollover: number;
+  totalAvailable: number;
   totalSpent: number;
   totalLeft: number;
   overBudgetCount: number;
@@ -327,10 +331,14 @@ export function MonthlyReviewTab({
         </div>
       ) : null}
 
-      <div className="grid gap-3 md:grid-cols-4">
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
         <div className="rounded-2xl border bg-card p-4 shadow-sm">
-          <div className="text-sm text-muted-foreground">Budgeted</div>
+          <div className="text-sm text-muted-foreground">Base budget</div>
           <div className="mt-2 text-2xl font-semibold">{fmt(data.budgetReview.totalBudgeted)}</div>
+        </div>
+        <div className="rounded-2xl border bg-card p-4 shadow-sm">
+          <div className="text-sm text-muted-foreground">Available</div>
+          <div className="mt-2 text-2xl font-semibold text-primary">{fmt(data.budgetReview.totalAvailable)}</div>
         </div>
         <div className="rounded-2xl border bg-card p-4 shadow-sm">
           <div className="text-sm text-muted-foreground">Spent</div>
@@ -374,7 +382,8 @@ export function MonthlyReviewTab({
                 </div>
               </div>
               <div className="mt-1 text-sm text-muted-foreground">
-                Budgeted {fmt(category.budgeted)} · Spent {fmt(category.spent)}
+                Base {fmt(category.budgeted)} · Rollover {fmt(category.rollover, true)} · Available{" "}
+                {fmt(category.available)} · Spent {fmt(category.spent)}
               </div>
             </div>
           ))}

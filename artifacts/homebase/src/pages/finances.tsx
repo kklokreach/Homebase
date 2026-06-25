@@ -1097,7 +1097,7 @@ export default function Finances() {
               <div className="min-w-0">
                 <div className="font-medium">{cat.categoryName}</div>
                 <div className="text-xs text-muted-foreground">
-                  Budgeted {fmt(cat.budgeted)} / Rollover {fmt(cat.rollover, true)}
+                  Base {fmt(cat.budgeted)} / Rollover {fmt(cat.rollover, true)}
                 </div>
               </div>
 
@@ -1613,7 +1613,7 @@ export default function Finances() {
                       ? "text-destructive"
                       : "text-primary",
                 },
-                { label: "Budgeted", value: fmt(dashboard.totalBudgeted), color: "" },
+                { label: "Base budget", value: fmt(dashboard.totalBudgeted), color: "" },
                 {
                   label: "Available",
                   value: fmt(dashboard.totalAvailable),

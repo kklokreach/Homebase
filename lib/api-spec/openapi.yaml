@@ -1193,11 +1193,15 @@ components:
           type: string
         budgeted:
           type: number
+        rollover:
+          type: number
+        available:
+          type: number
         spent:
           type: number
         left:
           type: number
-      required: [categoryId, categoryName, budgeted, spent, left]
+      required: [categoryId, categoryName, budgeted, rollover, available, spent, left]
 
     MonthlyReviewBudgetSummary:
       type: object
@@ -1207,6 +1211,10 @@ components:
         month:
           type: integer
         totalBudgeted:
+          type: number
+        totalRollover:
+          type: number
+        totalAvailable:
           type: number
         totalSpent:
           type: number
@@ -1220,7 +1228,7 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/MonthlyReviewBudgetCategory"
-      required: [year, month, totalBudgeted, totalSpent, totalLeft, overBudgetCount, underBudgetCount, categories]
+      required: [year, month, totalBudgeted, totalRollover, totalAvailable, totalSpent, totalLeft, overBudgetCount, underBudgetCount, categories]
 
     MonthlyReviewFundSummaryItem:
       type: object
