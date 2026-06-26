@@ -12,5 +12,6 @@ export interface MonthlyBudget {
   year: number;
   month: number;
   budgetAmount: number;
+  rolloverOverride?: number | null;
   rolloverApplied?: boolean;
 }

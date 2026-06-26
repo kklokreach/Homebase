@@ -365,6 +365,7 @@ export const ListMonthlyBudgetsResponseItem = zod.object({
   year: zod.number(),
   month: zod.number(),
   budgetAmount: zod.number(),
+  rolloverOverride: zod.number().nullish(),
   rolloverApplied: zod.boolean().optional(),
 });
 export const ListMonthlyBudgetsResponse = zod.array(
@@ -379,6 +380,7 @@ export const UpsertMonthlyBudgetBody = zod.object({
   year: zod.number(),
   month: zod.number(),
   budgetAmount: zod.number(),
+  rolloverOverride: zod.number().nullish(),
 });
 
 export const UpsertMonthlyBudgetResponse = zod.object({
@@ -387,6 +389,7 @@ export const UpsertMonthlyBudgetResponse = zod.object({
   year: zod.number(),
   month: zod.number(),
   budgetAmount: zod.number(),
+  rolloverOverride: zod.number().nullish(),
   rolloverApplied: zod.boolean().optional(),
 });
 
@@ -499,6 +502,8 @@ export const GetBudgetDashboardResponse = zod.object({
       categoryName: zod.string(),
       categoryGroupName: zod.string().nullish(),
       budgeted: zod.number(),
+      computedRollover: zod.number(),
+      rolloverOverride: zod.number().nullish(),
       rollover: zod.number(),
       available: zod.number(),
       spent: zod.number(),

@@ -900,6 +900,9 @@ components:
           type: integer
         budgetAmount:
           type: number
+        rolloverOverride:
+          type: number
+          nullable: true
         rolloverApplied:
           type: boolean
       required: [id, categoryId, year, month, budgetAmount]
@@ -915,6 +918,9 @@ components:
           type: integer
         budgetAmount:
           type: number
+        rolloverOverride:
+          type: number
+          nullable: true
       required: [categoryId, year, month, budgetAmount]
 
     TransactionType:
@@ -1193,6 +1199,11 @@ components:
           type: string
         budgeted:
           type: number
+        computedRollover:
+          type: number
+        rolloverOverride:
+          type: number
+          nullable: true
         rollover:
           type: number
         available:
@@ -1201,7 +1212,7 @@ components:
           type: number
         left:
           type: number
-      required: [categoryId, categoryName, budgeted, rollover, available, spent, left]
+      required: [categoryId, categoryName, budgeted, computedRollover, rolloverOverride, rollover, available, spent, left]
 
     MonthlyReviewBudgetSummary:
       type: object

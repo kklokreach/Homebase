@@ -111,6 +111,7 @@ export interface MonthlyBudget {
   year: number;
   month: number;
   budgetAmount: number;
+  rolloverOverride?: number | null;
   rolloverApplied?: boolean;
 }
 
@@ -119,6 +120,7 @@ export interface UpsertMonthlyBudgetBody {
   year: number;
   month: number;
   budgetAmount: number;
+  rolloverOverride?: number | null;
 }
 
 export type TransactionType = "expense" | "income";
@@ -168,6 +170,8 @@ export interface BudgetCategoryLine {
   categoryName: string;
   categoryGroupName?: string | null;
   budgeted: number;
+  computedRollover: number;
+  rolloverOverride?: number | null;
   rollover: number;
   available: number;
   spent: number;

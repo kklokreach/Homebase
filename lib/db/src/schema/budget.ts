@@ -17,6 +17,7 @@ export const monthlyBudgetsTable = pgTable("monthly_budgets", {
   year: integer("year").notNull(),
   month: integer("month").notNull(),
   budgetAmount: numeric("budget_amount", { precision: 10, scale: 2 }).notNull().default("0"),
+  rolloverOverride: numeric("rollover_override", { precision: 10, scale: 2 }),
   rolloverApplied: boolean("rollover_applied").notNull().default(false),
 });
 

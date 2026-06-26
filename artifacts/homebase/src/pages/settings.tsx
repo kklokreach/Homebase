@@ -7,6 +7,7 @@ import {
   ChevronRight,
   Pencil,
   Plus,
+  RotateCcw,
   Save,
   Settings as SettingsIcon,
   Trash2,
@@ -39,6 +40,8 @@ type DashboardCategory = {
   categoryId: number;
   categoryName: string;
   budgeted: number;
+  computedRollover: number;
+  rolloverOverride?: number | null;
   rollover: number;
   available: number;
   spent: number;
@@ -101,6 +104,17 @@ function cleanSignedMoneyInput(value: string) {
   return negative ? `-${amount}` : amount;
 }
 
+function cleanMoneyInput(value: string) {
+  const cleaned = value.replace(/[^0-9.]/g, "");
+  const [first, ...rest] = cleaned.split(".");
+  return rest.length === 0 ? first : `${first}.${rest.join("")}`;
+}
+
+function parseMoneyDraft(value: string | undefined) {
+  const parsed = Number.parseFloat(value ?? "0");
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
 function groupLabel(groupName?: string | null) {
   return groupName?.trim() || "Ungrouped";
 }
@@ -122,6 +136,8 @@ export default function Settings() {
   const [draftName, setDraftName] = useState("");
   const [draftGroup, setDraftGroup] = useState("");
   const [budgetDrafts, setBudgetDrafts] = useState<Record<number, string>>({});
+  const [rolloverDrafts, setRolloverDrafts] = useState<Record<number, string>>({});
+  const [touchedRolloverIds, setTouchedRolloverIds] = useState<Set<number>>(() => new Set());
   const [savingBudgetId, setSavingBudgetId] = useState<number | null>(null);
   const [reorderingCategoryId, setReorderingCategoryId] = useState<number | null>(null);
   const [reorderingGroupKey, setReorderingGroupKey] = useState<string | null>(null);
@@ -153,11 +169,15 @@ export default function Settings() {
 
   useEffect(() => {
     if (!dashboardView) return;
-    const next: Record<number, string> = {};
+    const nextBudgets: Record<number, string> = {};
+    const nextRollovers: Record<number, string> = {};
     for (const cat of dashboardView.categories as DashboardCategory[]) {
-      next[cat.categoryId] = String(cat.budgeted ?? 0);
+      nextBudgets[cat.categoryId] = String(cat.budgeted ?? 0);
+      nextRollovers[cat.categoryId] = String(cat.rollover ?? 0);
     }
-    setBudgetDrafts(next);
+    setBudgetDrafts(nextBudgets);
+    setRolloverDrafts(nextRollovers);
+    setTouchedRolloverIds(new Set());
   }, [dashboardView]);
 
   useEffect(() => {
@@ -243,8 +263,6 @@ export default function Settings() {
   async function handleSaveCategory(id: number) {
     if (!draftName.trim()) return;
 
-    const budgetAmount = parseFloat(budgetDrafts[id] || "0") || 0;
-
     try {
       setSavingBudgetId(id);
       await Promise.all([
@@ -257,12 +275,7 @@ export default function Settings() {
         }),
         api("/budget/monthly", {
           method: "POST",
-          body: JSON.stringify({
-            categoryId: id,
-            year,
-            month,
-            budgetAmount,
-          }),
+          body: JSON.stringify(monthlyBudgetPayload(id)),
         }),
       ]);
       setEditingId(null);
@@ -349,7 +362,44 @@ export default function Settings() {
   }
 
   async function handleSaveBudget(categoryId: number) {
-    const budgetAmount = parseFloat(budgetDrafts[categoryId] || "0") || 0;
+    try {
+      setSavingBudgetId(categoryId);
+      await api("/budget/monthly", {
+        method: "POST",
+        body: JSON.stringify(monthlyBudgetPayload(categoryId)),
+      });
+      refresh();
+      toast({ title: "Budget updated" });
+    } catch {
+      toast({ title: "Failed to update budget", variant: "destructive" });
+    } finally {
+      setSavingBudgetId(null);
+    }
+  }
+
+  function monthlyBudgetPayload(categoryId: number) {
+    const body: {
+      categoryId: number;
+      year: number;
+      month: number;
+      budgetAmount: number;
+      rolloverOverride?: number | null;
+    } = {
+      categoryId,
+      year,
+      month,
+      budgetAmount: parseMoneyDraft(budgetDrafts[categoryId]),
+    };
+
+    if (touchedRolloverIds.has(categoryId)) {
+      body.rolloverOverride = parseMoneyDraft(rolloverDrafts[categoryId]);
+    }
+
+    return body;
+  }
+
+  async function handleUseAutomaticRollover(categoryId: number) {
+    const row = dashboardMap.get(categoryId);
 
     try {
       setSavingBudgetId(categoryId);
@@ -359,13 +409,23 @@ export default function Settings() {
           categoryId,
           year,
           month,
-          budgetAmount,
+          budgetAmount: parseMoneyDraft(budgetDrafts[categoryId]),
+          rolloverOverride: null,
         }),
       });
+      setRolloverDrafts((prev) => ({
+        ...prev,
+        [categoryId]: String(row?.computedRollover ?? 0),
+      }));
+      setTouchedRolloverIds((prev) => {
+        const next = new Set(prev);
+        next.delete(categoryId);
+        return next;
+      });
       refresh();
-      toast({ title: "Budget updated" });
+      toast({ title: "Rollover set to automatic" });
     } catch {
-      toast({ title: "Failed to update budget", variant: "destructive" });
+      toast({ title: "Failed to reset rollover", variant: "destructive" });
     } finally {
       setSavingBudgetId(null);
     }
@@ -527,6 +587,9 @@ export default function Settings() {
                     {group.categories.map((cat, categoryIndex) => {
                       const editing = editingId === cat.id;
                       const row = dashboardMap.get(cat.id);
+                      const draftAvailable =
+                        parseMoneyDraft(budgetDrafts[cat.id]) + parseMoneyDraft(rolloverDrafts[cat.id]);
+                      const rolloverIsManual = row?.rolloverOverride != null;
 
                       return (
                         <div
@@ -624,24 +687,64 @@ export default function Settings() {
                           <div
                             className={
                               editing
-                                ? "grid gap-2 md:grid-cols-[120px_1fr] md:items-center"
-                                : "grid gap-2 md:grid-cols-[120px_1fr_auto] md:items-center"
+                                ? "grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_160px] md:items-end"
+                                : "grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_160px_auto] md:items-end"
                             }
                           >
-                            <div className="text-sm text-muted-foreground">
-                              Budget for {format(viewDate, "MMM")}
+                            <div className="space-y-1">
+                              <div className="text-xs font-medium text-muted-foreground">
+                                Base {format(viewDate, "MMM")}
+                              </div>
+                              <Input
+                                inputMode="decimal"
+                                value={budgetDrafts[cat.id] ?? ""}
+                                onChange={(e) =>
+                                  setBudgetDrafts((prev) => ({
+                                    ...prev,
+                                    [cat.id]: cleanMoneyInput(e.target.value),
+                                  }))
+                                }
+                                placeholder="0.00"
+                              />
                             </div>
-                            <Input
-                              inputMode="decimal"
-                              value={budgetDrafts[cat.id] ?? ""}
-                              onChange={(e) =>
-                                setBudgetDrafts((prev) => ({
-                                  ...prev,
-                                  [cat.id]: cleanSignedMoneyInput(e.target.value),
-                                }))
-                              }
-                              placeholder="0.00"
-                            />
+                            <div className="space-y-1">
+                              <div className="flex min-h-6 items-center justify-between gap-2">
+                                <div className="text-xs font-medium text-muted-foreground">Rollover</div>
+                                {rolloverIsManual ? (
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-6 px-2 text-xs"
+                                    onClick={() => handleUseAutomaticRollover(cat.id)}
+                                    disabled={savingBudgetId === cat.id}
+                                  >
+                                    <RotateCcw className="mr-1 h-3 w-3" />
+                                    Auto
+                                  </Button>
+                                ) : null}
+                              </div>
+                              <Input
+                                inputMode="decimal"
+                                value={rolloverDrafts[cat.id] ?? ""}
+                                onChange={(e) => {
+                                  setRolloverDrafts((prev) => ({
+                                    ...prev,
+                                    [cat.id]: cleanSignedMoneyInput(e.target.value),
+                                  }));
+                                  setTouchedRolloverIds((prev) => {
+                                    const next = new Set(prev);
+                                    next.add(cat.id);
+                                    return next;
+                                  });
+                                }}
+                                placeholder="0.00"
+                              />
+                            </div>
+                            <div className="rounded-md border border-border/50 bg-background/50 px-3 py-2">
+                              <div className="text-xs text-muted-foreground">Available</div>
+                              <div className="text-sm font-medium tabular-nums">{money(draftAvailable)}</div>
+                            </div>
                             {!editing && (
                               <Button
                                 onClick={() => handleSaveBudget(cat.id)}

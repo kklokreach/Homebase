@@ -10,6 +10,8 @@ export interface BudgetCategoryLine {
   categoryId: number;
   categoryName: string;
   budgeted: number;
+  computedRollover: number;
+  rolloverOverride?: number | null;
   rollover: number;
   available: number;
   spent: number;

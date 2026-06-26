@@ -11,4 +11,5 @@ export interface UpsertMonthlyBudgetBody {
   year: number;
   month: number;
   budgetAmount: number;
+  rolloverOverride?: number | null;
 }

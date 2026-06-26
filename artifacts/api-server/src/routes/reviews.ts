@@ -26,6 +26,7 @@ type MonthlyBudgetRow = {
   year: number;
   month: number;
   budgetAmount: string | number;
+  rolloverOverride: string | number | null;
   rolloverApplied: boolean;
 };
 
@@ -100,6 +101,20 @@ function baseBudgetAmount(
   return moneyForApi(budget.rolloverApplied ? amount - rollover : amount);
 }
 
+function rolloverOverrideAmount(
+  budget: Pick<MonthlyBudgetRow, "rolloverOverride"> | undefined,
+) {
+  if (!budget || budget.rolloverOverride == null) return null;
+  return moneyForApi(Number(budget.rolloverOverride));
+}
+
+function effectiveRollover(
+  budget: Pick<MonthlyBudgetRow, "rolloverOverride"> | undefined,
+  computedRollover: number,
+) {
+  return rolloverOverrideAmount(budget) ?? computedRollover;
+}
+
 function computeBudgetRolloversFromRows(
   categories: { id: number }[],
   priorBudgets: MonthlyBudgetRow[],
@@ -122,7 +137,7 @@ function computeBudgetRolloversFromRows(
         .filter((entry) => entry.categoryId === category.id && entry.date.startsWith(prefix))
         .reduce((sum, entry) => sum + entry.amount, 0);
       const budgeted = baseBudgetAmount(budget, runningLeft);
-      const available = budgeted + runningLeft;
+      const available = budgeted + effectiveRollover(budget, runningLeft);
       runningLeft = moneyForApi(available - spent);
     }
 
@@ -257,8 +272,9 @@ async function buildBudgetReview(year: number, month: number) {
 
   const lines = categories.map((category) => {
     const budgetEntry = monthlyBudgets.find((item) => item.categoryId === category.id);
-    const rollover = rollovers.get(category.id) ?? 0;
-    const budgeted = baseBudgetAmount(budgetEntry, rollover);
+    const computedRollover = rollovers.get(category.id) ?? 0;
+    const rollover = effectiveRollover(budgetEntry, computedRollover);
+    const budgeted = baseBudgetAmount(budgetEntry, computedRollover);
     const available = moneyForApi(budgeted + rollover);
     const spent = spendingEntries
       .filter((entry) => entry.categoryId === category.id)
