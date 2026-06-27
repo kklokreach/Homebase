@@ -92,13 +92,11 @@ function moneyForApi(amount: number) {
 }
 
 function baseBudgetAmount(
-  budget: Pick<MonthlyBudgetRow, "budgetAmount" | "rolloverApplied"> | undefined,
-  rollover: number,
+  budget: Pick<MonthlyBudgetRow, "budgetAmount"> | undefined,
+  _rollover: number,
 ) {
   if (!budget) return 0;
-  const amount = Number(budget.budgetAmount);
-  // Legacy rows marked rolloverApplied stored available amount, not base budget.
-  return moneyForApi(budget.rolloverApplied ? amount - rollover : amount);
+  return moneyForApi(Number(budget.budgetAmount));
 }
 
 function rolloverOverrideAmount(

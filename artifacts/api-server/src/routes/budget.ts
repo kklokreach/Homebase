@@ -147,13 +147,11 @@ function moneyForApi(amount: number) {
 }
 
 function baseBudgetAmount(
-  budget: Pick<MonthlyBudgetRow, "budgetAmount" | "rolloverApplied"> | undefined,
-  rollover: number,
+  budget: Pick<MonthlyBudgetRow, "budgetAmount"> | undefined,
+  _rollover: number,
 ) {
   if (!budget) return 0;
-  const amount = Number(budget.budgetAmount);
-  // Legacy rows marked rolloverApplied stored available amount, not base budget.
-  return moneyForApi(budget.rolloverApplied ? amount - rollover : amount);
+  return moneyForApi(Number(budget.budgetAmount));
 }
 
 function rolloverOverrideAmount(
@@ -168,6 +166,13 @@ function effectiveRollover(
   computedRollover: number,
 ) {
   return rolloverOverrideAmount(budget) ?? computedRollover;
+}
+
+function availableBudgetAmount(
+  budget: Pick<MonthlyBudgetRow, "budgetAmount" | "rolloverApplied" | "rolloverOverride"> | undefined,
+  computedRollover: number,
+) {
+  return moneyForApi(baseBudgetAmount(budget, computedRollover) + effectiveRollover(budget, computedRollover));
 }
 
 function normalizeCategoryId(value: number | null | undefined) {
@@ -406,10 +411,8 @@ async function ensureMonthlyBudgetRows(
       const previousBudget = previousBudgets.find((budget) => budget.categoryId === category.id);
       if (!previousBudget) return [];
 
-      const nextBudgetAmount = baseBudgetAmount(
-        previousBudget,
-        previousRollovers.get(category.id) ?? 0,
-      );
+      const previousComputedRollover = previousRollovers.get(category.id) ?? 0;
+      const nextBudgetAmount = availableBudgetAmount(previousBudget, previousComputedRollover);
 
       return [{
         categoryId: category.id,
