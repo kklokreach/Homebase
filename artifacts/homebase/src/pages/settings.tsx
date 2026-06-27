@@ -28,6 +28,7 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { apiFetch } from "@/lib/api-base";
+import { cn } from "@/lib/utils";
 
 type BudgetCategory = {
   id: number;
@@ -156,9 +157,6 @@ export default function Settings() {
     { query: { queryKey: getGetBudgetDashboardQueryKey({ year, month }) } },
   );
   const dashboardView = dashboard as DashboardWithIncome | undefined;
-  const incomeRemaining =
-    dashboardView?.incomeRemaining ??
-    ((dashboardView?.incomeAmount ?? 0) - (dashboardView?.totalBudgeted ?? 0));
 
   function refresh() {
     queryClient.invalidateQueries({ queryKey: getListBudgetCategoriesQueryKey() });
@@ -192,6 +190,37 @@ export default function Settings() {
     }
     return map;
   }, [dashboardView]);
+
+  const totalBudgetDrafted = useMemo(() => {
+    const categoryList = (categories ?? []) as BudgetCategory[];
+    if (categoryList.length === 0) {
+      return dashboardView?.totalBudgeted ?? 0;
+    }
+
+    return categoryList.reduce((sum, cat) => {
+      const draft = budgetDrafts[cat.id];
+      const savedAmount = dashboardMap.get(cat.id)?.budgeted ?? 0;
+      return sum + (draft === undefined ? savedAmount : parseMoneyDraft(draft));
+    }, 0);
+  }, [budgetDrafts, categories, dashboardMap, dashboardView?.totalBudgeted]);
+  const plannedIncomeAmount = parseMoneyDraft(incomeDraft);
+  const budgetedIncomeRemaining = plannedIncomeAmount - totalBudgetDrafted;
+  const budgetedIncomeState =
+    Math.abs(budgetedIncomeRemaining) < 0.005
+      ? "balanced"
+      : budgetedIncomeRemaining < 0
+      ? "over"
+      : "under";
+  const budgetedIncomeLabel =
+    budgetedIncomeState === "balanced"
+      ? "Fully planned"
+      : budgetedIncomeState === "over"
+      ? "Over planned"
+      : "Left to plan";
+  const budgetedIncomeSummary =
+    budgetedIncomeState === "balanced"
+      ? budgetedIncomeLabel
+      : `${budgetedIncomeLabel} ${money(Math.abs(budgetedIncomeRemaining))}`;
 
   const categoryGroups = useMemo<CategoryGroup[]>(() => {
     const groups = new Map<string, CategoryGroup>();
@@ -493,19 +522,18 @@ export default function Settings() {
             <div>
               <div className="text-sm font-medium">Monthly income</div>
               <div
-                className={
-                  incomeRemaining < 0
-                    ? "mt-1 text-sm font-medium text-destructive"
-                    : "mt-1 text-sm font-medium text-primary"
-                }
+                className={cn(
+                  "mt-1 text-sm font-medium",
+                  budgetedIncomeState === "over" ? "text-destructive" : "text-primary",
+                )}
               >
-                Income left {money(incomeRemaining)}
+                {budgetedIncomeSummary}
               </div>
             </div>
             <Input
               inputMode="decimal"
               value={incomeDraft}
-              onChange={(e) => setIncomeDraft(e.target.value.replace(/[^0-9.]/g, ""))}
+              onChange={(e) => setIncomeDraft(cleanMoneyInput(e.target.value))}
               placeholder="0.00"
               disabled={dashboardLoading || savingIncome}
               className="bg-background border-border/50"
@@ -534,6 +562,38 @@ export default function Settings() {
               Add
             </Button>
           </form>
+
+          <div
+            className={cn(
+              "sticky top-3 z-20 grid gap-3 rounded-xl border bg-card/95 p-3 shadow-sm backdrop-blur md:grid-cols-3",
+              budgetedIncomeState === "over" ? "border-destructive/40" : "border-border/70",
+            )}
+          >
+            <div className="min-w-0">
+              <div className="text-xs font-medium text-muted-foreground">Planned income</div>
+              <div className="mt-1 text-lg font-semibold tabular-nums">{money(plannedIncomeAmount)}</div>
+            </div>
+            <div className="min-w-0">
+              <div className="text-xs font-medium text-muted-foreground">Base budget</div>
+              <div className="mt-1 text-lg font-semibold tabular-nums">{money(totalBudgetDrafted)}</div>
+            </div>
+            <div className="min-w-0">
+              <div className="text-xs font-medium text-muted-foreground">Budgeted income remaining</div>
+              <div
+                className={cn(
+                  "mt-1 text-lg font-semibold tabular-nums",
+                  budgetedIncomeState === "over"
+                    ? "text-destructive"
+                    : budgetedIncomeState === "balanced"
+                    ? "text-primary"
+                    : "text-secondary",
+                )}
+              >
+                {money(budgetedIncomeRemaining)}
+              </div>
+              <div className="text-xs text-muted-foreground">{budgetedIncomeSummary}</div>
+            </div>
+          </div>
 
           {isLoading || dashboardLoading ? (
             <div className="space-y-2">
