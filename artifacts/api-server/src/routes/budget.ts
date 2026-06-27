@@ -9,6 +9,7 @@ import {
   transactionsTable,
 } from "@workspace/db";
 import { parsePositiveIntParam, sendInvalidId } from "../lib/http";
+import { rollOverUnfinishedTasksToToday } from "../lib/task-rollover";
 import {
   CreateBudgetCategoryBody,
   UpdateBudgetCategoryParams,
@@ -1118,7 +1119,7 @@ router.get("/budget/annual", async (req, res): Promise<void> => {
 
 router.get("/home/snapshot", async (_req, res): Promise<void> => {
   const { year, month } = currentYearMonth();
-  const today = new Date().toISOString().split("T")[0];
+  const today = await rollOverUnfinishedTasksToToday();
 
   // Today tasks
   const { tasksTable } = await import("@workspace/db");

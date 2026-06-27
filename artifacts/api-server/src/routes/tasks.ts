@@ -3,6 +3,7 @@ import { and, eq, gte, isNull, inArray, or, sql } from "drizzle-orm";
 import { db } from "@workspace/db";
 import { tasksTable } from "@workspace/db/schema";
 import { parsePositiveIntParam, sendInvalidId } from "../lib/http";
+import { rollOverUnfinishedTasksToToday } from "../lib/task-rollover";
 import {
   CreateTaskBody,
   UpdateTaskBody,
@@ -208,7 +209,7 @@ router.get("/tasks", async (req, res): Promise<void> => {
   }
 
   const { assignee, view, completed } = parsed.data;
-  const today = new Date().toISOString().split("T")[0];
+  const today = await rollOverUnfinishedTasksToToday();
 
   const conditions = [isNull(tasksTable.parentTaskId)];
 
@@ -298,7 +299,7 @@ router.post("/tasks", async (req, res): Promise<void> => {
 });
 
 router.get("/tasks/summary/today", async (_req, res): Promise<void> => {
-  const today = new Date().toISOString().split("T")[0];
+  const today = await rollOverUnfinishedTasksToToday();
 
   const tasks = await db
     .select()
