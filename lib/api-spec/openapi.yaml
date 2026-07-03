@@ -46,6 +46,11 @@ paths:
           schema:
             type: string
             enum: [today, upcoming, mine, wife, shared]
+        - name: listType
+          in: query
+          schema:
+            type: string
+            enum: [short, long, weekly]
         - name: completed
           in: query
           schema:
@@ -728,6 +733,9 @@ components:
         category:
           type: string
           nullable: true
+        listType:
+          type: string
+          enum: [short, long, weekly]
         parentTaskId:
           type: integer
           nullable: true
@@ -783,6 +791,9 @@ components:
         category:
           type: string
           nullable: true
+        listType:
+          type: string
+          enum: [short, long, weekly]
         parentTaskId:
           type: integer
           nullable: true
@@ -812,6 +823,9 @@ components:
         category:
           type: string
           nullable: true
+        listType:
+          type: string
+          enum: [short, long, weekly]
         parentTaskId:
           type: integer
           nullable: true

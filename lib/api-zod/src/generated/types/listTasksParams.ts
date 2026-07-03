@@ -11,5 +11,6 @@ import type { ListTasksView } from "./listTasksView";
 export type ListTasksParams = {
   assignee?: ListTasksAssignee;
   view?: ListTasksView;
+  listType?: "short" | "long" | "weekly";
   completed?: boolean;
 };

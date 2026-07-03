@@ -4,6 +4,7 @@ export type GroupableTask = Task & {
   parentTaskId?: number | null;
   sortOrder?: number;
   category?: string | null;
+  listType?: "short" | "long" | "weekly";
   subtasks?: GroupableTask[];
 };
 

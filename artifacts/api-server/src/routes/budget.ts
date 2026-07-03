@@ -9,7 +9,7 @@ import {
   transactionsTable,
 } from "@workspace/db";
 import { parsePositiveIntParam, sendInvalidId } from "../lib/http";
-import { rollOverUnfinishedTasksToToday } from "../lib/task-rollover";
+import { refreshTaskAutomation } from "../lib/task-rollover";
 import {
   CreateBudgetCategoryBody,
   UpdateBudgetCategoryParams,
@@ -1119,7 +1119,7 @@ router.get("/budget/annual", async (req, res): Promise<void> => {
 
 router.get("/home/snapshot", async (_req, res): Promise<void> => {
   const { year, month } = currentYearMonth();
-  const today = await rollOverUnfinishedTasksToToday();
+  const { today } = await refreshTaskAutomation();
 
   // Today tasks
   const { tasksTable } = await import("@workspace/db");
@@ -1130,6 +1130,7 @@ router.get("/home/snapshot", async (_req, res): Promise<void> => {
     .where(
       and(
         isNullFn(tasksTable.parentTaskId),
+        eq(tasksTable.listType, "short"),
         eq(tasksTable.completed, false),
         orFn(
           eq(tasksTable.dueDate, today),
@@ -1261,6 +1262,7 @@ function serializeTask(task: {
   recurring: string | null;
   notes: string | null;
   category: string | null;
+  listType: string;
   completed: boolean;
   completedAt: Date | null;
   createdAt: Date;
@@ -1274,6 +1276,7 @@ function serializeTask(task: {
     recurring: task.recurring,
     notes: task.notes,
     category: task.category,
+    listType: task.listType,
     completed: task.completed,
     completedAt: task.completedAt ? task.completedAt.toISOString() : null,
     createdAt: task.createdAt.toISOString(),

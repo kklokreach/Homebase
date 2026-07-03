@@ -42,7 +42,8 @@ type GroupDropTarget = {
   position: DropPosition;
 } | null;
 
-type TaskView = "all" | NonNullable<ListTasksParams["view"]>;
+type TaskListType = "short" | "long" | "weekly";
+type TaskView = "short" | "long" | "weekly" | NonNullable<ListTasksParams["view"]>;
 
 function cloneTaskGroups(groups: readonly TaskGroup[]) {
   return groups.map((group) => ({ ...group, tasks: [...group.tasks] }));
@@ -54,7 +55,7 @@ function getDropPosition(event: DragEvent<HTMLElement>): DropPosition {
 }
 
 export default function Tasks() {
-  const [view, setView] = useState<TaskView>("all");
+  const [view, setView] = useState<TaskView>("short");
   const [reorderingTaskId, setReorderingTaskId] = useState<number | null>(null);
   const [reorderingGroupKey, setReorderingGroupKey] = useState<string | null>(null);
   const [reorderMode, setReorderMode] = useState(false);
@@ -63,9 +64,17 @@ export default function Tasks() {
   const [groupDropTarget, setGroupDropTarget] = useState<GroupDropTarget>(null);
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  const taskListParams = view === "all" ? undefined : { view };
+  const taskListParams = useMemo<ListTasksParams>(() => {
+    if (view === "short" || view === "long" || view === "weekly") {
+      return { listType: view };
+    }
+
+    return { view };
+  }, [view]);
   const quickAddDefaultAssignee: "me" | "wife" | "us" | null =
     view === "mine" ? "me" : view === "wife" ? "wife" : view === "shared" ? "us" : null;
+  const quickAddDefaultListType: TaskListType =
+    view === "long" || view === "weekly" ? view : "short";
   
   const { data: tasks, isLoading } = useListTasks(
     taskListParams,
@@ -311,7 +320,11 @@ export default function Tasks() {
           </div>
           <h1 className="text-3xl font-serif font-bold text-foreground">Tasks</h1>
         </div>
-        <TaskQuickAdd defaultAssignee={quickAddDefaultAssignee} taskGroupOptions={taskGroupOptions} />
+        <TaskQuickAdd
+          defaultAssignee={quickAddDefaultAssignee}
+          defaultListType={quickAddDefaultListType}
+          taskGroupOptions={taskGroupOptions}
+        />
       </header>
 
       <Tabs
@@ -324,9 +337,11 @@ export default function Tasks() {
         className="w-full"
       >
         <TabsList className="w-full justify-start h-12 p-1 bg-muted/30 rounded-xl overflow-x-auto flex-nowrap shrink-0 border border-border/50">
-          <TabsTrigger value="all" className="rounded-lg data-[state=active]:bg-card data-[state=active]:shadow-sm">All</TabsTrigger>
+          <TabsTrigger value="short" className="rounded-lg data-[state=active]:bg-card data-[state=active]:shadow-sm">Short term</TabsTrigger>
           <TabsTrigger value="today" className="rounded-lg data-[state=active]:bg-card data-[state=active]:shadow-sm">Today</TabsTrigger>
           <TabsTrigger value="upcoming" className="rounded-lg data-[state=active]:bg-card data-[state=active]:shadow-sm">Upcoming</TabsTrigger>
+          <TabsTrigger value="long" className="rounded-lg data-[state=active]:bg-card data-[state=active]:shadow-sm">Long term</TabsTrigger>
+          <TabsTrigger value="weekly" className="rounded-lg data-[state=active]:bg-card data-[state=active]:shadow-sm">Weekly</TabsTrigger>
           <TabsTrigger value="mine" className="rounded-lg data-[state=active]:bg-card data-[state=active]:shadow-sm">Patrick</TabsTrigger>
           <TabsTrigger value="wife" className="rounded-lg data-[state=active]:bg-card data-[state=active]:shadow-sm">Lauren</TabsTrigger>
           <TabsTrigger value="shared" className="rounded-lg data-[state=active]:bg-card data-[state=active]:shadow-sm">Shared</TabsTrigger>

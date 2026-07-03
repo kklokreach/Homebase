@@ -14,5 +14,6 @@ export interface UpdateTaskBody {
   recurring?: string | null;
   notes?: string | null;
   category?: string | null;
+  listType?: "short" | "long" | "weekly";
   completed?: boolean;
 }

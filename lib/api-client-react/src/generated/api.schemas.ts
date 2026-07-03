@@ -27,6 +27,7 @@ export interface Task {
   recurring?: string | null;
   notes?: string | null;
   category?: string | null;
+  listType?: "short" | "long" | "weekly";
   completed: boolean;
   completedAt?: string | null;
   createdAt: string;
@@ -50,6 +51,7 @@ export interface CreateTaskBody {
   recurring?: string | null;
   notes?: string | null;
   category?: string | null;
+  listType?: "short" | "long" | "weekly";
 }
 
 export type UpdateTaskBodyAssignee =
@@ -69,6 +71,7 @@ export interface UpdateTaskBody {
   recurring?: string | null;
   notes?: string | null;
   category?: string | null;
+  listType?: "short" | "long" | "weekly";
   completed?: boolean;
 }
 
@@ -235,6 +238,7 @@ export interface HomeSnapshot {
 export type ListTasksParams = {
   assignee?: ListTasksAssignee;
   view?: ListTasksView;
+  listType?: "short" | "long" | "weekly";
   completed?: boolean;
 };
 

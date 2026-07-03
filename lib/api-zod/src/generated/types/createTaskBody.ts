@@ -14,4 +14,5 @@ export interface CreateTaskBody {
   recurring?: string | null;
   notes?: string | null;
   category?: string | null;
+  listType?: "short" | "long" | "weekly";
 }

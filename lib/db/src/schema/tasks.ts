@@ -10,6 +10,7 @@ export const tasksTable = pgTable("tasks", {
   recurring: text("recurring"),
   notes: text("notes"),
   category: text("category"),
+  listType: text("list_type").notNull().default("short"),
   parentTaskId: integer("parent_task_id").references((): AnyPgColumn => tasksTable.id, { onDelete: "cascade" }),
   sortOrder: integer("sort_order").notNull().default(0),
   completed: boolean("completed").notNull().default(false),

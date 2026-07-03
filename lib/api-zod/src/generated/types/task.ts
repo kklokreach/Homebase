@@ -15,6 +15,7 @@ export interface Task {
   recurring?: string | null;
   notes?: string | null;
   category?: string | null;
+  listType?: "short" | "long" | "weekly";
   completed: boolean;
   completedAt?: Date | null;
   createdAt: Date;

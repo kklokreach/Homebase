@@ -18,6 +18,7 @@ import { getTaskGroupOptions, type GroupableTask } from "@/lib/task-groups";
 
 const NO_TASK_GROUP_VALUE = "__homebase_no_task_group__";
 const NEW_TASK_GROUP_VALUE = "__homebase_new_task_group__";
+type TaskListType = "short" | "long" | "weekly";
 
 function findTaskGroupOption(value: string, taskGroupOptions: readonly string[]) {
   const normalized = value.trim().toLocaleLowerCase();
@@ -27,12 +28,14 @@ function findTaskGroupOption(value: string, taskGroupOptions: readonly string[])
 
 interface TaskQuickAddProps {
   defaultAssignee?: "me" | "wife" | "us" | null;
+  defaultListType?: TaskListType;
   placeholder?: string;
   taskGroupOptions?: string[];
 }
 
 export function TaskQuickAdd({
   defaultAssignee = null,
+  defaultListType = "short",
   placeholder = "Add a new task...",
   taskGroupOptions: providedTaskGroupOptions,
 }: TaskQuickAddProps) {
@@ -40,6 +43,7 @@ export function TaskQuickAdd({
   const [showOptions, setShowOptions] = useState(false);
   const [assignee, setAssignee] = useState<"me" | "wife" | "us" | "null">(defaultAssignee ?? "null");
   const [dueDate, setDueDate] = useState("");
+  const [listType, setListType] = useState<TaskListType>(defaultListType);
   const [category, setCategory] = useState("");
   const [categoryMode, setCategoryMode] = useState<"existing" | "new">("existing");
   const [parentTaskId, setParentTaskId] = useState<string>("null");
@@ -64,6 +68,10 @@ export function TaskQuickAdd({
     setAssignee(defaultAssignee ?? "null");
   }, [defaultAssignee]);
 
+  useEffect(() => {
+    setListType(defaultListType);
+  }, [defaultListType]);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim() || createTask.isPending) return;
@@ -74,6 +82,7 @@ export function TaskQuickAdd({
           title: title.trim(),
           assignee: assignee === "null" ? null : assignee,
           dueDate: dueDate || null,
+          listType,
           category: category.trim() || null,
           parentTaskId: parentTaskId === "null" ? null : Number(parentTaskId),
         } as any,
@@ -83,6 +92,7 @@ export function TaskQuickAdd({
           setTitle("");
           setAssignee(defaultAssignee ?? "null");
           setDueDate("");
+          setListType(defaultListType);
           setCategory("");
           setCategoryMode("existing");
           setParentTaskId("null");
@@ -133,7 +143,7 @@ export function TaskQuickAdd({
       </div>
 
       {showOptions && (
-        <div className="grid gap-3 rounded-2xl border border-border/50 bg-card/60 p-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-3 rounded-2xl border border-border/50 bg-card/60 p-4 sm:grid-cols-2 lg:grid-cols-3">
           <div className="space-y-2">
             <Label htmlFor="task-assignee">Assignee</Label>
             <Select value={assignee} onValueChange={(value) => setAssignee(value as "me" | "wife" | "us" | "null")}>
@@ -145,6 +155,20 @@ export function TaskQuickAdd({
                 <SelectItem value="me">Patrick</SelectItem>
                 <SelectItem value="wife">Lauren</SelectItem>
                 <SelectItem value="us">Shared</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="task-list">List</Label>
+            <Select value={listType} onValueChange={(value) => setListType(value as TaskListType)}>
+              <SelectTrigger id="task-list" className="bg-background">
+                <SelectValue placeholder="Choose list" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="short">Short term</SelectItem>
+                <SelectItem value="long">Long term</SelectItem>
+                <SelectItem value="weekly">Weekly</SelectItem>
               </SelectContent>
             </Select>
           </div>

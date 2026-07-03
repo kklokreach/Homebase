@@ -30,6 +30,7 @@ type TaskWithSubtasks = Task & {
   parentTaskId?: number | null;
   sortOrder?: number;
   category?: string | null;
+  listType?: TaskListType;
   subtaskSummary?: {
     total: number;
     completed: number;
@@ -42,6 +43,8 @@ type ParentTaskOption = {
   id: number;
   title: string;
 };
+
+type TaskListType = "short" | "long" | "weekly";
 
 const NO_TASK_GROUP_VALUE = "__homebase_no_task_group__";
 const NEW_TASK_GROUP_VALUE = "__homebase_new_task_group__";
@@ -116,6 +119,7 @@ export function TaskItem({
   const [editTitle, setEditTitle] = useState(task.title);
   const [editAssignee, setEditAssignee] = useState<string>(task.assignee || "null");
   const [editDueDate, setEditDueDate] = useState(dateInputValue(task.dueDate));
+  const [editListType, setEditListType] = useState<TaskListType>(task.listType ?? "short");
   const [editCategory, setEditCategory] = useState(task.category ?? "");
   const [editCategoryMode, setEditCategoryMode] = useState<"existing" | "new">("existing");
   const [editParentTaskId, setEditParentTaskId] = useState<string>(
@@ -167,6 +171,7 @@ export function TaskItem({
           title: editTitle,
           assignee: editAssignee === "null" ? null : (editAssignee as any),
           dueDate: editDueDate || null,
+          listType: editListType,
           category: editCategory.trim() || null,
           ...(isSubtask
             ? { parentTaskId: editParentTaskId === "null" ? null : Number(editParentTaskId) }
@@ -221,11 +226,19 @@ export function TaskItem({
       {categoryLabel}
     </Badge>
   ) : null;
+  const taskListType = task.listType ?? "short";
+  const listBadge =
+    taskListType === "short" ? null : (
+      <Badge variant="outline" className="border-border/70 bg-muted/30 text-muted-foreground">
+        {taskListType === "long" ? "Long term" : "Weekly"}
+      </Badge>
+    );
 
   const startEditing = () => {
     setEditTitle(task.title);
     setEditAssignee(task.assignee || "null");
     setEditDueDate(dateInputValue(task.dueDate));
+    setEditListType(task.listType ?? "short");
     setEditCategory(task.category ?? "");
     setEditCategoryMode(
       task.category?.trim() && !findTaskGroupOption(task.category, taskGroupOptions) ? "new" : "existing"
@@ -251,6 +264,7 @@ export function TaskItem({
           title: newSubtaskTitle.trim(),
           assignee: task.assignee ?? null,
           dueDate: task.dueDate ?? null,
+          listType: task.listType ?? "short",
           category: task.category ?? null,
           parentTaskId: task.id,
         } as any,
@@ -329,9 +343,10 @@ export function TaskItem({
               {task.title}
             </div>
             
-            {!compact && ((task.assignee || (!hideDueDate && task.dueDate) || task.category) || hasSubtasks) && !isOpen && (
+            {!compact && ((task.assignee || (!hideDueDate && task.dueDate) || task.category || listBadge) || hasSubtasks) && !isOpen && (
               <div className="flex flex-wrap items-center gap-2 mt-1.5 opacity-80">
                 {getAssigneeBadge()}
+                {listBadge}
                 {categoryBadge}
                 {!hideDueDate && task.dueDate && (
                   <div className="flex items-center text-xs text-muted-foreground">
@@ -439,7 +454,7 @@ export function TaskItem({
                   className="bg-background"
                 />
               </div>
-              <div className={cn("grid gap-3", isSubtask ? "sm:grid-cols-2 lg:grid-cols-4" : "sm:grid-cols-3")}>
+              <div className={cn("grid gap-3", isSubtask ? "sm:grid-cols-2 lg:grid-cols-5" : "sm:grid-cols-2 lg:grid-cols-4")}>
                 <div className="space-y-2">
                   <Label>Assignee</Label>
                   <Select value={editAssignee} onValueChange={setEditAssignee}>
@@ -462,6 +477,19 @@ export function TaskItem({
                     onChange={(e) => setEditDueDate(e.target.value)}
                     className="bg-background"
                   />
+                </div>
+                <div className="space-y-2">
+                  <Label>List</Label>
+                  <Select value={editListType} onValueChange={(value) => setEditListType(value as TaskListType)}>
+                    <SelectTrigger className="bg-background">
+                      <SelectValue placeholder="Choose list" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="short">Short term</SelectItem>
+                      <SelectItem value="long">Long term</SelectItem>
+                      <SelectItem value="weekly">Weekly</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
                 {isSubtask && (
                   <div className="space-y-2">
@@ -545,6 +573,15 @@ export function TaskItem({
                   <div className="flex flex-col">
                     <span className="text-[10px] uppercase tracking-wider font-semibold opacity-50 mb-1">Assignee</span>
                     <div>{getAssigneeBadge() || <span className="text-xs">Unassigned</span>}</div>
+                  </div>
+
+                  <div className="flex flex-col">
+                    <span className="text-[10px] uppercase tracking-wider font-semibold opacity-50 mb-1">List</span>
+                    <div>
+                      {taskListType === "short"
+                        ? <span className="text-xs">Short term</span>
+                        : listBadge}
+                    </div>
                   </div>
 
                   <div className="flex flex-col">

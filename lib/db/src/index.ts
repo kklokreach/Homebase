@@ -15,6 +15,9 @@ export const db = drizzle(pool, { schema });
 
 export async function ensureSchema() {
   await pool.query(`
+    ALTER TABLE tasks
+      ADD COLUMN IF NOT EXISTS list_type text NOT NULL DEFAULT 'short';
+
     ALTER TABLE transactions
       ADD COLUMN IF NOT EXISTS transaction_type text NOT NULL DEFAULT 'expense';
 

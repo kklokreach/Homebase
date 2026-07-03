@@ -3,7 +3,7 @@ import { and, eq, gte, isNull, inArray, or, sql } from "drizzle-orm";
 import { db } from "@workspace/db";
 import { tasksTable } from "@workspace/db/schema";
 import { parsePositiveIntParam, sendInvalidId } from "../lib/http";
-import { rollOverUnfinishedTasksToToday } from "../lib/task-rollover";
+import { refreshTaskAutomation } from "../lib/task-rollover";
 import {
   CreateTaskBody,
   UpdateTaskBody,
@@ -13,8 +13,10 @@ import {
 
 const router: IRouter = Router();
 const COMPLETED_TASK_VISIBILITY_DAYS = 3;
+const TASK_LIST_TYPES = new Set(["short", "long", "weekly"]);
 
 type TaskRow = typeof tasksTable.$inferSelect;
+type TaskListType = "short" | "long" | "weekly";
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -24,6 +26,12 @@ function completedTaskVisibilityCutoff() {
   const cutoff = new Date();
   cutoff.setDate(cutoff.getDate() - COMPLETED_TASK_VISIBILITY_DAYS);
   return cutoff;
+}
+
+function normalizeTaskListType(value: unknown): TaskListType {
+  return typeof value === "string" && TASK_LIST_TYPES.has(value)
+    ? value as TaskListType
+    : "short";
 }
 
 function defaultTaskVisibilityCondition() {
@@ -172,6 +180,7 @@ async function serializeTask(task: TaskRow, subtasksMap?: Map<number, TaskRow[]>
     recurring: task.recurring,
     notes: task.notes,
     category: task.category,
+    listType: normalizeTaskListType(task.listType),
     parentTaskId: task.parentTaskId,
     sortOrder: task.sortOrder,
     completed: task.completed,
@@ -189,6 +198,7 @@ async function serializeTask(task: TaskRow, subtasksMap?: Map<number, TaskRow[]>
             recurring: subtask.recurring,
             notes: subtask.notes,
             category: subtask.category,
+            listType: normalizeTaskListType(subtask.listType),
             parentTaskId: subtask.parentTaskId,
             sortOrder: subtask.sortOrder,
             completed: subtask.completed,
@@ -208,8 +218,8 @@ router.get("/tasks", async (req, res): Promise<void> => {
     return;
   }
 
-  const { assignee, view, completed } = parsed.data;
-  const today = await rollOverUnfinishedTasksToToday();
+  const { assignee, view, completed, listType } = parsed.data;
+  const { today } = await refreshTaskAutomation();
 
   const conditions = [isNull(tasksTable.parentTaskId)];
 
@@ -220,6 +230,7 @@ router.get("/tasks", async (req, res): Promise<void> => {
   }
 
   if (view === "today") {
+    conditions.push(eq(tasksTable.listType, "short"));
     conditions.push(
       and(
         eq(tasksTable.completed, false),
@@ -227,6 +238,7 @@ router.get("/tasks", async (req, res): Promise<void> => {
       ) ?? sql`true`,
     );
   } else if (view === "upcoming") {
+    conditions.push(eq(tasksTable.listType, "short"));
     conditions.push(eq(tasksTable.completed, false));
     conditions.push(gte(tasksTable.dueDate, today));
   } else if (view === "mine") {
@@ -239,6 +251,10 @@ router.get("/tasks", async (req, res): Promise<void> => {
 
   if (assignee && !view) {
     conditions.push(eq(tasksTable.assignee, assignee));
+  }
+
+  if (listType) {
+    conditions.push(eq(tasksTable.listType, listType));
   }
 
   const tasks = await db
@@ -286,6 +302,7 @@ router.post("/tasks", async (req, res): Promise<void> => {
       recurring: parsed.data.recurring ?? null,
       notes: parsed.data.notes ?? null,
       category: parsed.data.category ?? null,
+      listType: normalizeTaskListType(parsed.data.listType),
       parentTaskId: parsed.data.parentTaskId ?? null,
       sortOrder,
     })
@@ -299,7 +316,7 @@ router.post("/tasks", async (req, res): Promise<void> => {
 });
 
 router.get("/tasks/summary/today", async (_req, res): Promise<void> => {
-  const today = await rollOverUnfinishedTasksToToday();
+  const { today } = await refreshTaskAutomation();
 
   const tasks = await db
     .select()
@@ -307,6 +324,7 @@ router.get("/tasks/summary/today", async (_req, res): Promise<void> => {
     .where(
       and(
         isNull(tasksTable.parentTaskId),
+        eq(tasksTable.listType, "short"),
         eq(tasksTable.completed, false),
         or(eq(tasksTable.dueDate, today), isNull(tasksTable.dueDate)),
       ),
@@ -441,6 +459,7 @@ router.put("/tasks/:id", async (req, res): Promise<void> => {
   if ("recurring" in d) updates.recurring = d.recurring ?? null;
   if ("notes" in d) updates.notes = d.notes ?? null;
   if ("category" in d) updates.category = d.category ?? null;
+  if ("listType" in d) updates.listType = normalizeTaskListType(d.listType);
   if ("parentTaskId" in d) updates.parentTaskId = d.parentTaskId ?? null;
   if (d.sortOrder !== undefined) updates.sortOrder = d.sortOrder;
   if (parentChanged && d.sortOrder === undefined) {
