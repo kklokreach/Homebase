@@ -82,6 +82,7 @@ interface TaskItemProps {
   taskGroupOptions?: string[];
   wrapTitle?: boolean;
   hideDueDate?: boolean;
+  hideListBadge?: boolean;
   onDragStart?: DragEventHandler<HTMLDivElement>;
   onDragOver?: DragEventHandler<HTMLDivElement>;
   onDragLeave?: DragEventHandler<HTMLDivElement>;
@@ -107,6 +108,7 @@ export function TaskItem({
   taskGroupOptions = [],
   wrapTitle = false,
   hideDueDate = false,
+  hideListBadge = false,
   onDragStart,
   onDragOver,
   onDragLeave,
@@ -221,14 +223,14 @@ export function TaskItem({
 
   const categoryLabel = task.category?.trim();
   const categoryBadge = categoryLabel ? (
-    <Badge variant="outline" className="border-primary/20 bg-primary/5 text-primary">
+    <Badge variant="outline" className="min-w-0 max-w-full border-primary/20 bg-primary/5 text-primary">
       <Tag className="w-3 h-3 mr-1" />
-      {categoryLabel}
+      <span className="truncate">{categoryLabel}</span>
     </Badge>
   ) : null;
   const taskListType = task.listType ?? "short";
   const listBadge =
-    taskListType === "short" ? null : (
+    hideListBadge || taskListType === "short" ? null : (
       <Badge variant="outline" className="border-border/70 bg-muted/30 text-muted-foreground">
         {taskListType === "long" ? "Long term" : "Weekly"}
       </Badge>
@@ -568,29 +570,31 @@ export function TaskItem({
                 </div>
               )}
               
-              <div className="w-full flex items-center justify-between mt-2 pt-2">
-                <div className="flex items-center gap-4">
-                  <div className="flex flex-col">
+              <div className="w-full flex flex-col gap-3 mt-2 pt-2 sm:flex-row sm:items-end sm:justify-between">
+                <div className="grid min-w-0 flex-1 gap-3 sm:grid-cols-2 lg:flex lg:flex-wrap lg:items-end lg:gap-4">
+                  <div className="flex min-w-0 flex-col">
                     <span className="text-[10px] uppercase tracking-wider font-semibold opacity-50 mb-1">Assignee</span>
                     <div>{getAssigneeBadge() || <span className="text-xs">Unassigned</span>}</div>
                   </div>
 
-                  <div className="flex flex-col">
-                    <span className="text-[10px] uppercase tracking-wider font-semibold opacity-50 mb-1">List</span>
-                    <div>
-                      {taskListType === "short"
-                        ? <span className="text-xs">Short term</span>
-                        : listBadge}
+                  {!hideListBadge && (
+                    <div className="flex min-w-0 flex-col">
+                      <span className="text-[10px] uppercase tracking-wider font-semibold opacity-50 mb-1">List</span>
+                      <div>
+                        {taskListType === "short"
+                          ? <span className="text-xs">Short term</span>
+                          : listBadge}
+                      </div>
                     </div>
-                  </div>
+                  )}
 
-                  <div className="flex flex-col">
+                  <div className="flex min-w-0 flex-col">
                     <span className="text-[10px] uppercase tracking-wider font-semibold opacity-50 mb-1">Group</span>
-                    <div>{categoryBadge || <span className="text-xs">Ungrouped</span>}</div>
+                    <div className="min-w-0">{categoryBadge || <span className="text-xs">Ungrouped</span>}</div>
                   </div>
                   
                   {task.dueDate && (
-                    <div className="flex flex-col">
+                    <div className="flex min-w-0 flex-col">
                       <span className="text-[10px] uppercase tracking-wider font-semibold opacity-50 mb-1">Due Date</span>
                       <div className="flex items-center text-xs text-foreground font-medium">
                         <Clock className="w-3.5 h-3.5 mr-1.5 text-primary" />
@@ -600,7 +604,7 @@ export function TaskItem({
                   )}
                 </div>
                 
-                <div className="flex gap-1">
+                <div className="flex shrink-0 justify-end gap-1 self-end sm:self-auto">
                   <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground" onClick={startEditing}>
                     <Edit2 className="w-4 h-4" />
                   </Button>
@@ -639,6 +643,7 @@ export function TaskItem({
                           isSubtask
                           parentTaskOptions={parentTaskOptions}
                           taskGroupOptions={taskGroupOptions}
+                          hideListBadge={hideListBadge}
                         />
                       ))}
                     </div>
