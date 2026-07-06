@@ -47,7 +47,6 @@ export async function refreshTaskAutomation() {
     .set({ dueDate: today })
     .where(
       and(
-        eq(tasksTable.listType, "short"),
         eq(tasksTable.completed, false),
         lt(tasksTable.dueDate, today),
       ),
