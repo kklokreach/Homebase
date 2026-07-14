@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { format } from "date-fns";
 import { FileText, Plus, Save, Search, Trash2 } from "lucide-react";
 import {
@@ -52,6 +52,18 @@ function readNoteDrafts(): Record<string, NoteDraft> {
 
 function getNoteDraft(noteId: number) {
   return readNoteDrafts()[String(noteId)] ?? null;
+}
+
+function getFreshNoteDraft(note: Note) {
+  const draft = getNoteDraft(note.id);
+  if (!draft) return null;
+
+  if (Date.parse(draft.savedAt) <= Date.parse(note.updatedAt)) {
+    clearNoteDraft(note.id);
+    return null;
+  }
+
+  return draft;
 }
 
 function saveNoteDraft(noteId: number, draft: Pick<NoteDraft, "title" | "body">) {
@@ -131,36 +143,43 @@ export default function Notes() {
       (draftTitle !== selectedNote.title || draftBody !== selectedNote.body),
   );
 
-  useEffect(() => {
-    let cancelled = false;
+  const loadNotes = useCallback(async (options: { silent?: boolean } = {}) => {
+    try {
+      if (!options.silent) setLoading(true);
+      setError(null);
+      const params = search.trim() ? `?search=${encodeURIComponent(search.trim())}` : "";
+      const data = await api<Note[]>(`/notes${params}`);
 
-    async function loadNotes() {
-      try {
-        setLoading(true);
-        setError(null);
-        const params = search.trim() ? `?search=${encodeURIComponent(search.trim())}` : "";
-        const data = await api<Note[]>(`/notes${params}`);
-
-        if (cancelled) return;
-        setNotes(data);
-        setSelectedId((current) => {
-          if (current != null && data.some((note) => note.id === current)) return current;
-          return data[0]?.id ?? null;
-        });
-      } catch (err) {
-        if (!cancelled) {
-          setError(err instanceof Error ? err.message : "Failed to load notes");
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
+      setNotes(data);
+      setSelectedId((current) => {
+        if (current != null && data.some((note) => note.id === current)) return current;
+        return data[0]?.id ?? null;
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load notes");
+    } finally {
+      if (!options.silent) setLoading(false);
     }
-
-    loadNotes();
-    return () => {
-      cancelled = true;
-    };
   }, [search]);
+
+  useEffect(() => {
+    void loadNotes();
+  }, [loadNotes]);
+
+  useEffect(() => {
+    const refreshVisibleNotes = () => {
+      if (document.visibilityState === "visible") {
+        void loadNotes({ silent: true });
+      }
+    };
+
+    window.addEventListener("focus", refreshVisibleNotes);
+    document.addEventListener("visibilitychange", refreshVisibleNotes);
+    return () => {
+      window.removeEventListener("focus", refreshVisibleNotes);
+      document.removeEventListener("visibilitychange", refreshVisibleNotes);
+    };
+  }, [loadNotes]);
 
   useEffect(() => {
     if (!selectedNote) {
@@ -170,7 +189,7 @@ export default function Notes() {
       return;
     }
 
-    const savedDraft = getNoteDraft(selectedNote.id);
+    const savedDraft = getFreshNoteDraft(selectedNote);
     setDraftTitle(savedDraft?.title ?? selectedNote.title);
     setDraftBody(savedDraft?.body ?? selectedNote.body);
     setDraftNoteId(selectedNote.id);

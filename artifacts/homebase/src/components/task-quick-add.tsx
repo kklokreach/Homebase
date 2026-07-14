@@ -15,6 +15,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { getTaskGroupOptions, type GroupableTask } from "@/lib/task-groups";
+import {
+  defaultWeeklyDay,
+  normalizeWeeklyDays,
+  repeatCountFromSelect,
+  REPEAT_OPTIONS,
+  toggleWeeklyDay,
+  WEEKDAY_OPTIONS,
+} from "@/lib/task-schedule";
 
 const NO_TASK_GROUP_VALUE = "__homebase_no_task_group__";
 const NEW_TASK_GROUP_VALUE = "__homebase_new_task_group__";
@@ -44,6 +52,8 @@ export function TaskQuickAdd({
   const [assignee, setAssignee] = useState<"me" | "wife" | "us" | "null">(defaultAssignee ?? "null");
   const [dueDate, setDueDate] = useState("");
   const [listType, setListType] = useState<TaskListType>(defaultListType);
+  const [weeklyDays, setWeeklyDays] = useState<number[]>(() => [defaultWeeklyDay()]);
+  const [repeatCount, setRepeatCount] = useState("forever");
   const [category, setCategory] = useState("");
   const [categoryMode, setCategoryMode] = useState<"existing" | "new">("existing");
   const [parentTaskId, setParentTaskId] = useState<string>("null");
@@ -72,17 +82,26 @@ export function TaskQuickAdd({
     setListType(defaultListType);
   }, [defaultListType]);
 
+  useEffect(() => {
+    if (listType === "weekly" && normalizeWeeklyDays(weeklyDays).length === 0) {
+      setWeeklyDays([defaultWeeklyDay()]);
+    }
+  }, [listType, weeklyDays]);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim() || createTask.isPending) return;
+    const normalizedWeeklyDays = normalizeWeeklyDays(weeklyDays);
+    if (!title.trim() || createTask.isPending || (listType === "weekly" && normalizedWeeklyDays.length === 0)) return;
 
     createTask.mutate(
       {
         data: {
           title: title.trim(),
           assignee: assignee === "null" ? null : assignee,
-          dueDate: dueDate || null,
+          dueDate: listType === "weekly" ? null : dueDate || null,
           listType,
+          weeklyDays: listType === "weekly" ? normalizedWeeklyDays : [],
+          repeatCount: listType === "weekly" ? repeatCountFromSelect(repeatCount) : null,
           category: category.trim() || null,
           parentTaskId: parentTaskId === "null" ? null : Number(parentTaskId),
         } as any,
@@ -93,6 +112,8 @@ export function TaskQuickAdd({
           setAssignee(defaultAssignee ?? "null");
           setDueDate("");
           setListType(defaultListType);
+          setWeeklyDays([defaultWeeklyDay()]);
+          setRepeatCount("forever");
           setCategory("");
           setCategoryMode("existing");
           setParentTaskId("null");
@@ -135,7 +156,11 @@ export function TaskQuickAdd({
             type="submit"
             size="sm"
             className="h-10 px-4 rounded-xl font-medium transition-all"
-            disabled={!title.trim() || createTask.isPending}
+            disabled={
+              !title.trim() ||
+              createTask.isPending ||
+              (listType === "weekly" && normalizeWeeklyDays(weeklyDays).length === 0)
+            }
           >
             Add
           </Button>
@@ -173,16 +198,58 @@ export function TaskQuickAdd({
             </Select>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="task-due-date">Due Date</Label>
-            <Input
-              id="task-due-date"
-              type="date"
-              value={dueDate}
-              onChange={(e) => setDueDate(e.target.value)}
-              className="bg-background"
-            />
-          </div>
+          {listType === "weekly" ? (
+            <>
+              <div className="space-y-2 sm:col-span-2">
+                <Label>Days</Label>
+                <div className="flex flex-wrap gap-1.5">
+                  {WEEKDAY_OPTIONS.map((day) => {
+                    const selected = normalizeWeeklyDays(weeklyDays).includes(day.value);
+                    return (
+                      <Button
+                        key={day.value}
+                        type="button"
+                        variant={selected ? "secondary" : "outline"}
+                        size="sm"
+                        className="h-8 min-w-12 rounded-md px-2 text-xs"
+                        aria-pressed={selected}
+                        onClick={() => setWeeklyDays((current) => toggleWeeklyDay(current, day.value))}
+                      >
+                        {day.short}
+                      </Button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="task-repeat-count">Repeats</Label>
+                <Select value={repeatCount} onValueChange={setRepeatCount}>
+                  <SelectTrigger id="task-repeat-count" className="bg-background">
+                    <SelectValue placeholder="Forever" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {REPEAT_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </>
+          ) : (
+            <div className="space-y-2">
+              <Label htmlFor="task-due-date">Due Date</Label>
+              <Input
+                id="task-due-date"
+                type="date"
+                value={dueDate}
+                onChange={(e) => setDueDate(e.target.value)}
+                className="bg-background"
+              />
+            </div>
+          )}
 
           <div className="space-y-2">
             <Label htmlFor="task-category">Group</Label>

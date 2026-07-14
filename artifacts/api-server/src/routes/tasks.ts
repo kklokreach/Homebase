@@ -3,7 +3,16 @@ import { and, eq, gte, isNull, inArray, or, sql } from "drizzle-orm";
 import { db } from "@workspace/db";
 import { tasksTable } from "@workspace/db/schema";
 import { parsePositiveIntParam, sendInvalidId } from "../lib/http";
-import { refreshTaskAutomation } from "../lib/task-rollover";
+import {
+  householdTodayDateString,
+  normalizeRepeatCount,
+  parseWeeklyDays,
+  refreshTaskAutomation,
+  serializeWeeklyDays,
+  weeklyTaskHasUpcoming,
+  weeklyTaskOccursOn,
+  weekdayForDateKey,
+} from "../lib/task-rollover";
 import {
   CreateTaskBody,
   UpdateTaskBody,
@@ -32,6 +41,26 @@ function normalizeTaskListType(value: unknown): TaskListType {
   return typeof value === "string" && TASK_LIST_TYPES.has(value)
     ? value as TaskListType
     : "short";
+}
+
+function dateBodyValue(value: Date | null | undefined) {
+  return value ? value.toISOString().slice(0, 10) : null;
+}
+
+function defaultWeeklyDays(today: string) {
+  return String(weekdayForDateKey(today));
+}
+
+function weeklyDaysForWrite(value: unknown, listType: TaskListType, today: string, fallback = "") {
+  if (listType !== "weekly") return "";
+  return serializeWeeklyDays(value) || fallback || defaultWeeklyDays(today);
+}
+
+function taskMatchesScheduleView(task: TaskRow, view: string | undefined, today: string) {
+  const listType = normalizeTaskListType(task.listType);
+  if (view === "today" && listType === "weekly") return weeklyTaskOccursOn(task, today);
+  if (view === "upcoming" && listType === "weekly") return weeklyTaskHasUpcoming(task, today);
+  return true;
 }
 
 function defaultTaskVisibilityCondition() {
@@ -181,6 +210,9 @@ async function serializeTask(task: TaskRow, subtasksMap?: Map<number, TaskRow[]>
     notes: task.notes,
     category: task.category,
     listType: normalizeTaskListType(task.listType),
+    weeklyDays: parseWeeklyDays(task.weeklyDays),
+    repeatCount: normalizeRepeatCount(task.repeatCount),
+    repeatStartDate: task.repeatStartDate,
     parentTaskId: task.parentTaskId,
     sortOrder: task.sortOrder,
     completed: task.completed,
@@ -199,6 +231,9 @@ async function serializeTask(task: TaskRow, subtasksMap?: Map<number, TaskRow[]>
             notes: subtask.notes,
             category: subtask.category,
             listType: normalizeTaskListType(subtask.listType),
+            weeklyDays: parseWeeklyDays(subtask.weeklyDays),
+            repeatCount: normalizeRepeatCount(subtask.repeatCount),
+            repeatStartDate: subtask.repeatStartDate,
             parentTaskId: subtask.parentTaskId,
             sortOrder: subtask.sortOrder,
             completed: subtask.completed,
@@ -230,17 +265,15 @@ router.get("/tasks", async (req, res): Promise<void> => {
   }
 
   if (view === "today") {
-    conditions.push(eq(tasksTable.listType, "short"));
     conditions.push(
       and(
         eq(tasksTable.completed, false),
-        or(eq(tasksTable.dueDate, today), isNull(tasksTable.dueDate)),
+        or(eq(tasksTable.listType, "weekly"), eq(tasksTable.dueDate, today), isNull(tasksTable.dueDate)),
       ) ?? sql`true`,
     );
   } else if (view === "upcoming") {
-    conditions.push(eq(tasksTable.listType, "short"));
     conditions.push(eq(tasksTable.completed, false));
-    conditions.push(gte(tasksTable.dueDate, today));
+    conditions.push(or(eq(tasksTable.listType, "weekly"), gte(tasksTable.dueDate, today)) ?? sql`true`);
   } else if (view === "mine") {
     conditions.push(eq(tasksTable.assignee, "me"));
   } else if (view === "wife") {
@@ -263,8 +296,9 @@ router.get("/tasks", async (req, res): Promise<void> => {
     .where(and(...conditions))
     .orderBy(tasksTable.sortOrder, tasksTable.dueDate, tasksTable.createdAt);
 
-  const subtasksMap = await getDirectSubtasks(tasks.map((task) => task.id));
-  res.json(await Promise.all(tasks.map((task) => serializeTask(task, subtasksMap))));
+  const viewTasks = tasks.filter((task) => taskMatchesScheduleView(task, view, today));
+  const subtasksMap = await getDirectSubtasks(viewTasks.map((task) => task.id));
+  res.json(await Promise.all(viewTasks.map((task) => serializeTask(task, subtasksMap))));
 });
 
 router.post("/tasks", async (req, res): Promise<void> => {
@@ -293,16 +327,21 @@ router.post("/tasks", async (req, res): Promise<void> => {
     sortOrder = Number(siblings[0]?.count ?? 0);
   }
 
+  const today = householdTodayDateString();
+  const listType = normalizeTaskListType(parsed.data.listType);
   const [task] = await db
     .insert(tasksTable)
     .values({
       title: parsed.data.title,
       assignee: parsed.data.assignee ?? null,
-      dueDate: parsed.data.dueDate ? parsed.data.dueDate.toISOString().slice(0, 10) : null,
+      dueDate: listType === "weekly" ? null : dateBodyValue(parsed.data.dueDate),
       recurring: parsed.data.recurring ?? null,
       notes: parsed.data.notes ?? null,
       category: parsed.data.category ?? null,
-      listType: normalizeTaskListType(parsed.data.listType),
+      listType,
+      weeklyDays: weeklyDaysForWrite(parsed.data.weeklyDays, listType, today),
+      repeatCount: listType === "weekly" ? normalizeRepeatCount(parsed.data.repeatCount) : null,
+      repeatStartDate: listType === "weekly" ? dateBodyValue(parsed.data.repeatStartDate) ?? today : null,
       parentTaskId: parsed.data.parentTaskId ?? null,
       sortOrder,
     })
@@ -324,15 +363,15 @@ router.get("/tasks/summary/today", async (_req, res): Promise<void> => {
     .where(
       and(
         isNull(tasksTable.parentTaskId),
-        eq(tasksTable.listType, "short"),
         eq(tasksTable.completed, false),
-        or(eq(tasksTable.dueDate, today), isNull(tasksTable.dueDate)),
+        or(eq(tasksTable.listType, "weekly"), eq(tasksTable.dueDate, today), isNull(tasksTable.dueDate)),
       ),
     )
     .orderBy(tasksTable.sortOrder, tasksTable.createdAt);
 
-  const subtasksMap = await getDirectSubtasks(tasks.map((task) => task.id));
-  const serialized = await Promise.all(tasks.map((task) => serializeTask(task, subtasksMap)));
+  const todayTasks = tasks.filter((task) => taskMatchesScheduleView(task, "today", today));
+  const subtasksMap = await getDirectSubtasks(todayTasks.map((task) => task.id));
+  const serialized = await Promise.all(todayTasks.map((task) => serializeTask(task, subtasksMap)));
 
   const me = serialized.filter((task) => task.assignee === "me");
   const wife = serialized.filter((task) => task.assignee === "wife");
@@ -451,15 +490,34 @@ router.put("/tasks/:id", async (req, res): Promise<void> => {
 
   const updates: Record<string, unknown> = {};
   const d = parsed.data;
+  const today = householdTodayDateString();
+  const nextListType = "listType" in d ? normalizeTaskListType(d.listType) : normalizeTaskListType(existing.listType);
   const parentChanged =
     "parentTaskId" in d && (d.parentTaskId ?? null) !== (existing.parentTaskId ?? null);
   if (d.title !== undefined) updates.title = d.title;
   if ("assignee" in d) updates.assignee = d.assignee ?? null;
-  if ("dueDate" in d) updates.dueDate = d.dueDate ? d.dueDate.toISOString().slice(0, 10) : null;
+  if ("dueDate" in d) updates.dueDate = nextListType === "weekly" ? null : dateBodyValue(d.dueDate);
+  if (!("dueDate" in d) && "listType" in d && nextListType === "weekly") updates.dueDate = null;
   if ("recurring" in d) updates.recurring = d.recurring ?? null;
   if ("notes" in d) updates.notes = d.notes ?? null;
   if ("category" in d) updates.category = d.category ?? null;
-  if ("listType" in d) updates.listType = normalizeTaskListType(d.listType);
+  if ("listType" in d) updates.listType = nextListType;
+  if ("weeklyDays" in d || "listType" in d) {
+    updates.weeklyDays = weeklyDaysForWrite(
+      d.weeklyDays,
+      nextListType,
+      today,
+      nextListType === "weekly" ? existing.weeklyDays : "",
+    );
+  }
+  if ("repeatCount" in d || "listType" in d) {
+    updates.repeatCount = nextListType === "weekly" ? normalizeRepeatCount(d.repeatCount) : null;
+  }
+  if ("repeatStartDate" in d) {
+    updates.repeatStartDate = nextListType === "weekly" ? dateBodyValue(d.repeatStartDate) ?? today : null;
+  } else if ("listType" in d) {
+    updates.repeatStartDate = nextListType === "weekly" ? existing.repeatStartDate ?? today : null;
+  }
   if ("parentTaskId" in d) updates.parentTaskId = d.parentTaskId ?? null;
   if (d.sortOrder !== undefined) updates.sortOrder = d.sortOrder;
   if (parentChanged && d.sortOrder === undefined) {

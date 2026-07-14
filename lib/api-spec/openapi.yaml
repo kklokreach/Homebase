@@ -736,6 +736,20 @@ components:
         listType:
           type: string
           enum: [short, long, weekly]
+        weeklyDays:
+          type: array
+          items:
+            type: integer
+            minimum: 0
+            maximum: 6
+        repeatCount:
+          type: integer
+          nullable: true
+          minimum: 1
+        repeatStartDate:
+          type: string
+          nullable: true
+          format: date
         parentTaskId:
           type: integer
           nullable: true
@@ -794,6 +808,20 @@ components:
         listType:
           type: string
           enum: [short, long, weekly]
+        weeklyDays:
+          type: array
+          items:
+            type: integer
+            minimum: 0
+            maximum: 6
+        repeatCount:
+          type: integer
+          nullable: true
+          minimum: 1
+        repeatStartDate:
+          type: string
+          nullable: true
+          format: date
         parentTaskId:
           type: integer
           nullable: true
@@ -826,6 +854,20 @@ components:
         listType:
           type: string
           enum: [short, long, weekly]
+        weeklyDays:
+          type: array
+          items:
+            type: integer
+            minimum: 0
+            maximum: 6
+        repeatCount:
+          type: integer
+          nullable: true
+          minimum: 1
+        repeatStartDate:
+          type: string
+          nullable: true
+          format: date
         parentTaskId:
           type: integer
           nullable: true
@@ -868,6 +910,9 @@ components:
         color:
           type: string
           nullable: true
+        groupName:
+          type: string
+          nullable: true
         sortOrder:
           type: integer
       required: [id, name, sortOrder]
@@ -883,6 +928,9 @@ components:
         color:
           type: string
           nullable: true
+        groupName:
+          type: string
+          nullable: true
         sortOrder:
           type: integer
       required: [name]
@@ -896,6 +944,9 @@ components:
           type: string
           nullable: true
         color:
+          type: string
+          nullable: true
+        groupName:
           type: string
           nullable: true
         sortOrder:

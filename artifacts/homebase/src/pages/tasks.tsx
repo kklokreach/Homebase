@@ -43,7 +43,7 @@ type GroupDropTarget = {
 } | null;
 
 type TaskListType = "short" | "long" | "weekly";
-type TaskSection = TaskListType;
+type TaskSection = "all" | TaskListType;
 type TaskView = "all" | NonNullable<ListTasksParams["view"]>;
 
 function cloneTaskGroups(groups: readonly TaskGroup[]) {
@@ -56,7 +56,7 @@ function getDropPosition(event: DragEvent<HTMLElement>): DropPosition {
 }
 
 export default function Tasks() {
-  const [section, setSection] = useState<TaskSection>("short");
+  const [section, setSection] = useState<TaskSection>("all");
   const [view, setView] = useState<TaskView>("all");
   const [reorderingTaskId, setReorderingTaskId] = useState<number | null>(null);
   const [reorderingGroupKey, setReorderingGroupKey] = useState<string | null>(null);
@@ -66,32 +66,34 @@ export default function Tasks() {
   const [groupDropTarget, setGroupDropTarget] = useState<GroupDropTarget>(null);
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  const taskListParams = useMemo<ListTasksParams>(() => {
-    if (section !== "short") {
-      return { listType: section };
+  const taskListParams = useMemo<ListTasksParams | undefined>(() => {
+    const params: ListTasksParams = {};
+
+    if (section !== "all") {
+      params.listType = section;
     }
 
-    if (view === "all") {
-      return { listType: "short" };
+    if (view !== "all") {
+      params.view = view;
     }
 
-    return { view, listType: "short" };
+    if (Object.keys(params).length === 0) {
+      return undefined;
+    }
+
+    return params;
   }, [section, view]);
   const quickAddDefaultAssignee: "me" | "wife" | "us" | null =
-    section === "short" && view === "mine"
-      ? "me"
-      : section === "short" && view === "wife"
-        ? "wife"
-        : section === "short" && view === "shared"
-          ? "us"
-          : null;
-  const quickAddDefaultListType: TaskListType = section;
+    view === "mine" ? "me" : view === "wife" ? "wife" : view === "shared" ? "us" : null;
+  const quickAddDefaultListType: TaskListType = section === "all" ? "short" : section;
   const quickAddPlaceholder =
-    section === "short"
-      ? "Add a short-term task..."
-      : section === "long"
-        ? "Add a long-term task..."
-        : "Add a weekly task...";
+    section === "all"
+      ? "Add a new task..."
+      : section === "short"
+        ? "Add a short-term task..."
+        : section === "long"
+          ? "Add a long-term task..."
+          : "Add a weekly task...";
   
   const { data: tasks, isLoading } = useListTasks(
     taskListParams,
@@ -355,6 +357,7 @@ export default function Tasks() {
         className="w-full"
       >
         <TabsList className="w-full justify-start h-12 p-1 bg-muted/30 rounded-xl overflow-x-auto flex-nowrap shrink-0 border border-border/50">
+          <TabsTrigger value="all" className="rounded-lg data-[state=active]:bg-card data-[state=active]:shadow-sm">All</TabsTrigger>
           <TabsTrigger value="short" className="rounded-lg data-[state=active]:bg-card data-[state=active]:shadow-sm">Short term</TabsTrigger>
           <TabsTrigger value="long" className="rounded-lg data-[state=active]:bg-card data-[state=active]:shadow-sm">Long term</TabsTrigger>
           <TabsTrigger value="weekly" className="rounded-lg data-[state=active]:bg-card data-[state=active]:shadow-sm">Weekly</TabsTrigger>
@@ -362,26 +365,24 @@ export default function Tasks() {
       </Tabs>
 
       <div className="w-full space-y-6">
-        {section === "short" && (
-          <Tabs
-            value={view}
-            onValueChange={(v) => {
-              setView(v as TaskView);
-              setReorderMode(false);
-              clearDragState();
-            }}
-            className="w-full"
-          >
-            <TabsList className="w-full justify-start h-12 p-1 bg-muted/30 rounded-xl overflow-x-auto flex-nowrap shrink-0 border border-border/50">
-              <TabsTrigger value="all" className="rounded-lg data-[state=active]:bg-card data-[state=active]:shadow-sm">All</TabsTrigger>
-              <TabsTrigger value="today" className="rounded-lg data-[state=active]:bg-card data-[state=active]:shadow-sm">Today</TabsTrigger>
-              <TabsTrigger value="upcoming" className="rounded-lg data-[state=active]:bg-card data-[state=active]:shadow-sm">Upcoming</TabsTrigger>
-              <TabsTrigger value="mine" className="rounded-lg data-[state=active]:bg-card data-[state=active]:shadow-sm">Patrick</TabsTrigger>
-              <TabsTrigger value="wife" className="rounded-lg data-[state=active]:bg-card data-[state=active]:shadow-sm">Lauren</TabsTrigger>
-              <TabsTrigger value="shared" className="rounded-lg data-[state=active]:bg-card data-[state=active]:shadow-sm">Shared</TabsTrigger>
-            </TabsList>
-          </Tabs>
-        )}
+        <Tabs
+          value={view}
+          onValueChange={(v) => {
+            setView(v as TaskView);
+            setReorderMode(false);
+            clearDragState();
+          }}
+          className="w-full"
+        >
+          <TabsList className="w-full justify-start h-12 p-1 bg-muted/30 rounded-xl overflow-x-auto flex-nowrap shrink-0 border border-border/50">
+            <TabsTrigger value="all" className="rounded-lg data-[state=active]:bg-card data-[state=active]:shadow-sm">All</TabsTrigger>
+            <TabsTrigger value="today" className="rounded-lg data-[state=active]:bg-card data-[state=active]:shadow-sm">Today</TabsTrigger>
+            <TabsTrigger value="upcoming" className="rounded-lg data-[state=active]:bg-card data-[state=active]:shadow-sm">Upcoming</TabsTrigger>
+            <TabsTrigger value="mine" className="rounded-lg data-[state=active]:bg-card data-[state=active]:shadow-sm">Patrick</TabsTrigger>
+            <TabsTrigger value="wife" className="rounded-lg data-[state=active]:bg-card data-[state=active]:shadow-sm">Lauren</TabsTrigger>
+            <TabsTrigger value="shared" className="rounded-lg data-[state=active]:bg-card data-[state=active]:shadow-sm">Shared</TabsTrigger>
+          </TabsList>
+        </Tabs>
 
         <div className="mt-8">
           {isLoading ? (
@@ -516,7 +517,7 @@ export default function Tasks() {
                       onDragEnd={clearDragState}
                       parentTaskOptions={parentTaskOptions}
                       taskGroupOptions={taskGroupOptions}
-                      hideListBadge
+                      hideListBadge={section !== "all"}
                     />
                   ))}
                 </section>

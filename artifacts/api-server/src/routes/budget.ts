@@ -9,7 +9,12 @@ import {
   transactionsTable,
 } from "@workspace/db";
 import { parsePositiveIntParam, sendInvalidId } from "../lib/http";
-import { refreshTaskAutomation } from "../lib/task-rollover";
+import {
+  normalizeRepeatCount,
+  parseWeeklyDays,
+  refreshTaskAutomation,
+  weeklyTaskOccursOn,
+} from "../lib/task-rollover";
 import {
   CreateBudgetCategoryBody,
   UpdateBudgetCategoryParams,
@@ -1024,7 +1029,7 @@ router.get("/budget/dashboard", async (req, res): Promise<void> => {
   const totalSpent = spendingEntries.reduce((s, entry) => s + entry.amount, 0);
   const totalLeft = totalAvailable - totalSpent;
   const incomeAmount = Number(monthlyIncome?.amount ?? 0);
-  const incomeRemaining = incomeAmount - totalSpent;
+  const incomeRemaining = moneyForApi(incomeTransactionsTotal - totalSpent);
   const budgetOverUnder = incomeAmount - totalBudgeted;
 
   const recentTxns = await db
@@ -1130,19 +1135,22 @@ router.get("/home/snapshot", async (_req, res): Promise<void> => {
     .where(
       and(
         isNullFn(tasksTable.parentTaskId),
-        eq(tasksTable.listType, "short"),
         eq(tasksTable.completed, false),
         orFn(
+          eq(tasksTable.listType, "weekly"),
           eq(tasksTable.dueDate, today),
           isNullFn(tasksTable.dueDate),
         ),
       ),
     )
     .orderBy(tasksTable.sortOrder, tasksTable.createdAt);
+  const todayTasks = tasks.filter((task) =>
+    task.listType === "weekly" ? weeklyTaskOccursOn(task, today) : true,
+  );
 
-  const me = tasks.filter((t) => t.assignee === "me").map(serializeTask);
-  const wife = tasks.filter((t) => t.assignee === "wife").map(serializeTask);
-  const shared = tasks.filter((t) => t.assignee === "us").map(serializeTask);
+  const me = todayTasks.filter((t) => t.assignee === "me").map(serializeTask);
+  const wife = todayTasks.filter((t) => t.assignee === "wife").map(serializeTask);
+  const shared = todayTasks.filter((t) => t.assignee === "us").map(serializeTask);
 
   // Budget snapshot — uses full chain rollover just like the dashboard
   const monthStr = String(month).padStart(2, "0");
@@ -1202,7 +1210,7 @@ router.get("/home/snapshot", async (_req, res): Promise<void> => {
       totalLeft,
       incomeAmount,
       incomeTransactionsTotal,
-      incomeRemaining: incomeAmount - totalSpent,
+      incomeRemaining: moneyForApi(incomeTransactionsTotal - totalSpent),
       month,
       year,
     },
@@ -1263,6 +1271,9 @@ function serializeTask(task: {
   notes: string | null;
   category: string | null;
   listType: string;
+  weeklyDays: string | null;
+  repeatCount: number | null;
+  repeatStartDate: string | null;
   completed: boolean;
   completedAt: Date | null;
   createdAt: Date;
@@ -1277,6 +1288,9 @@ function serializeTask(task: {
     notes: task.notes,
     category: task.category,
     listType: task.listType,
+    weeklyDays: parseWeeklyDays(task.weeklyDays),
+    repeatCount: normalizeRepeatCount(task.repeatCount),
+    repeatStartDate: task.repeatStartDate,
     completed: task.completed,
     completedAt: task.completedAt ? task.completedAt.toISOString() : null,
     createdAt: task.createdAt.toISOString(),

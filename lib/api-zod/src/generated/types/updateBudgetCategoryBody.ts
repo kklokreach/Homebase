@@ -10,5 +10,6 @@ export interface UpdateBudgetCategoryBody {
   name?: string;
   icon?: string | null;
   color?: string | null;
+  groupName?: string | null;
   sortOrder?: number;
 }

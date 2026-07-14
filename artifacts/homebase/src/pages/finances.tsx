@@ -1606,7 +1606,7 @@ export default function Finances() {
                   color: "",
                 },
                 {
-                  label: "Income left",
+                  label: "Received left",
                   value: fmt(dashboardView?.incomeRemaining ?? 0),
                   color:
                     (dashboardView?.incomeRemaining ?? 0) < 0

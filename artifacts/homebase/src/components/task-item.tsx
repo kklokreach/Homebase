@@ -1,6 +1,6 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useState, type DragEventHandler } from "react";
-import { ArrowDown, ArrowUp, ChevronDown, Clock, Edit2, GripVertical, ListChecks, Plus, Tag, Trash2, User, Users } from "lucide-react";
+import { ArrowDown, ArrowUp, CalendarDays, ChevronDown, Clock, Edit2, GripVertical, ListChecks, Plus, Repeat, Tag, Trash2, User, Users } from "lucide-react";
 import { format } from "date-fns";
 import {
   useCreateTask,
@@ -25,12 +25,26 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
+import {
+  defaultWeeklyDay,
+  formatRepeatCount,
+  formatWeeklyDays,
+  normalizeWeeklyDays,
+  repeatCountFromSelect,
+  repeatSelectValue,
+  REPEAT_OPTIONS,
+  toggleWeeklyDay,
+  WEEKDAY_OPTIONS,
+} from "@/lib/task-schedule";
 
 type TaskWithSubtasks = Task & {
   parentTaskId?: number | null;
   sortOrder?: number;
   category?: string | null;
   listType?: TaskListType;
+  weeklyDays?: number[] | null;
+  repeatCount?: number | null;
+  repeatStartDate?: string | null;
   subtaskSummary?: {
     total: number;
     completed: number;
@@ -122,6 +136,10 @@ export function TaskItem({
   const [editAssignee, setEditAssignee] = useState<string>(task.assignee || "null");
   const [editDueDate, setEditDueDate] = useState(dateInputValue(task.dueDate));
   const [editListType, setEditListType] = useState<TaskListType>(task.listType ?? "short");
+  const [editWeeklyDays, setEditWeeklyDays] = useState<number[]>(() =>
+    normalizeWeeklyDays(task.weeklyDays ?? [defaultWeeklyDay()]),
+  );
+  const [editRepeatCount, setEditRepeatCount] = useState(repeatSelectValue(task.repeatCount));
   const [editCategory, setEditCategory] = useState(task.category ?? "");
   const [editCategoryMode, setEditCategoryMode] = useState<"existing" | "new">("existing");
   const [editParentTaskId, setEditParentTaskId] = useState<string>(
@@ -166,14 +184,18 @@ export function TaskItem({
   };
 
   const handleSave = () => {
+    if (editListType === "weekly" && normalizeWeeklyDays(editWeeklyDays).length === 0) return;
+
     updateTask.mutate(
       {
         id: task.id,
         data: {
           title: editTitle,
           assignee: editAssignee === "null" ? null : (editAssignee as any),
-          dueDate: editDueDate || null,
+          dueDate: editListType === "weekly" ? null : editDueDate || null,
           listType: editListType,
+          weeklyDays: editListType === "weekly" ? normalizeWeeklyDays(editWeeklyDays) : [],
+          repeatCount: editListType === "weekly" ? repeatCountFromSelect(editRepeatCount) : null,
           category: editCategory.trim() || null,
           ...(isSubtask
             ? { parentTaskId: editParentTaskId === "null" ? null : Number(editParentTaskId) }
@@ -235,12 +257,28 @@ export function TaskItem({
         {taskListType === "long" ? "Long term" : "Weekly"}
       </Badge>
     );
+  const weeklyDaysBadge =
+    taskListType === "weekly" ? (
+      <Badge variant="outline" className="border-primary/20 bg-primary/5 text-primary">
+        <CalendarDays className="w-3 h-3 mr-1" />
+        {formatWeeklyDays(task.weeklyDays)}
+      </Badge>
+    ) : null;
+  const weeklyRepeatBadge =
+    taskListType === "weekly" ? (
+      <Badge variant="outline" className="border-border/70 bg-muted/30 text-muted-foreground">
+        <Repeat className="w-3 h-3 mr-1" />
+        {formatRepeatCount(task.repeatCount)}
+      </Badge>
+    ) : null;
 
   const startEditing = () => {
     setEditTitle(task.title);
     setEditAssignee(task.assignee || "null");
     setEditDueDate(dateInputValue(task.dueDate));
     setEditListType(task.listType ?? "short");
+    setEditWeeklyDays(normalizeWeeklyDays(task.weeklyDays ?? [defaultWeeklyDay()]));
+    setEditRepeatCount(repeatSelectValue(task.repeatCount));
     setEditCategory(task.category ?? "");
     setEditCategoryMode(
       task.category?.trim() && !findTaskGroupOption(task.category, taskGroupOptions) ? "new" : "existing"
@@ -267,6 +305,8 @@ export function TaskItem({
           assignee: task.assignee ?? null,
           dueDate: task.dueDate ?? null,
           listType: task.listType ?? "short",
+          weeklyDays: task.listType === "weekly" ? normalizeWeeklyDays(task.weeklyDays) : [],
+          repeatCount: task.listType === "weekly" ? task.repeatCount ?? null : null,
           category: task.category ?? null,
           parentTaskId: task.id,
         } as any,
@@ -345,12 +385,14 @@ export function TaskItem({
               {task.title}
             </div>
             
-            {!compact && ((task.assignee || (!hideDueDate && task.dueDate) || task.category || listBadge) || hasSubtasks) && !isOpen && (
+            {!compact && ((task.assignee || (!hideDueDate && task.dueDate && taskListType !== "weekly") || task.category || listBadge || weeklyDaysBadge) || hasSubtasks) && !isOpen && (
               <div className="flex flex-wrap items-center gap-2 mt-1.5 opacity-80">
                 {getAssigneeBadge()}
                 {listBadge}
+                {weeklyDaysBadge}
+                {weeklyRepeatBadge}
                 {categoryBadge}
-                {!hideDueDate && task.dueDate && (
+                {!hideDueDate && task.dueDate && taskListType !== "weekly" && (
                   <div className="flex items-center text-xs text-muted-foreground">
                     <Clock className="w-3 h-3 mr-1" />
                     {format(dateForDisplay(task.dueDate), "MMM d")}
@@ -408,7 +450,7 @@ export function TaskItem({
                 {subtaskSummary.completed}/{subtaskSummary.total}
               </span>
             )}
-            {!hideDueDate && task.dueDate && (
+            {!hideDueDate && task.dueDate && taskListType !== "weekly" && (
               <span className="text-xs text-muted-foreground tabular-nums">
                 {format(dateForDisplay(task.dueDate), "MMM d")}
               </span>
@@ -472,15 +514,6 @@ export function TaskItem({
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label>Due Date</Label>
-                  <Input
-                    type="date"
-                    value={editDueDate}
-                    onChange={(e) => setEditDueDate(e.target.value)}
-                    className="bg-background"
-                  />
-                </div>
-                <div className="space-y-2">
                   <Label>List</Label>
                   <Select value={editListType} onValueChange={(value) => setEditListType(value as TaskListType)}>
                     <SelectTrigger className="bg-background">
@@ -493,6 +526,56 @@ export function TaskItem({
                     </SelectContent>
                   </Select>
                 </div>
+                {editListType === "weekly" ? (
+                  <>
+                    <div className="space-y-2 sm:col-span-2">
+                      <Label>Days</Label>
+                      <div className="flex flex-wrap gap-1.5">
+                        {WEEKDAY_OPTIONS.map((day) => {
+                          const selected = normalizeWeeklyDays(editWeeklyDays).includes(day.value);
+                          return (
+                            <Button
+                              key={day.value}
+                              type="button"
+                              variant={selected ? "secondary" : "outline"}
+                              size="sm"
+                              className="h-8 min-w-12 rounded-md px-2 text-xs"
+                              aria-pressed={selected}
+                              onClick={() => setEditWeeklyDays((current) => toggleWeeklyDay(current, day.value))}
+                            >
+                              {day.short}
+                            </Button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Repeats</Label>
+                      <Select value={editRepeatCount} onValueChange={setEditRepeatCount}>
+                        <SelectTrigger className="bg-background">
+                          <SelectValue placeholder="Forever" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {REPEAT_OPTIONS.map((option) => (
+                            <SelectItem key={option.value} value={option.value}>
+                              {option.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </>
+                ) : (
+                  <div className="space-y-2">
+                    <Label>Due Date</Label>
+                    <Input
+                      type="date"
+                      value={editDueDate}
+                      onChange={(e) => setEditDueDate(e.target.value)}
+                      className="bg-background"
+                    />
+                  </div>
+                )}
                 {isSubtask && (
                   <div className="space-y-2">
                     <Label>Parent Task</Label>
@@ -559,7 +642,13 @@ export function TaskItem({
               </div>
               <div className="flex justify-end gap-2 pt-2">
                 <Button variant="ghost" size="sm" onClick={() => setIsEditing(false)}>Cancel</Button>
-                <Button size="sm" onClick={handleSave}>Save Changes</Button>
+                <Button
+                  size="sm"
+                  onClick={handleSave}
+                  disabled={editListType === "weekly" && normalizeWeeklyDays(editWeeklyDays).length === 0}
+                >
+                  Save Changes
+                </Button>
               </div>
             </div>
           ) : (
@@ -588,12 +677,25 @@ export function TaskItem({
                     </div>
                   )}
 
+                  {taskListType === "weekly" && (
+                    <>
+                      <div className="flex min-w-0 flex-col">
+                        <span className="text-[10px] uppercase tracking-wider font-semibold opacity-50 mb-1">Days</span>
+                        <div>{weeklyDaysBadge || <span className="text-xs">No days</span>}</div>
+                      </div>
+                      <div className="flex min-w-0 flex-col">
+                        <span className="text-[10px] uppercase tracking-wider font-semibold opacity-50 mb-1">Repeats</span>
+                        <div>{weeklyRepeatBadge}</div>
+                      </div>
+                    </>
+                  )}
+
                   <div className="flex min-w-0 flex-col">
                     <span className="text-[10px] uppercase tracking-wider font-semibold opacity-50 mb-1">Group</span>
                     <div className="min-w-0">{categoryBadge || <span className="text-xs">Ungrouped</span>}</div>
                   </div>
                   
-                  {task.dueDate && (
+                  {task.dueDate && taskListType !== "weekly" && (
                     <div className="flex min-w-0 flex-col">
                       <span className="text-[10px] uppercase tracking-wider font-semibold opacity-50 mb-1">Due Date</span>
                       <div className="flex items-center text-xs text-foreground font-medium">

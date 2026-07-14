@@ -18,6 +18,15 @@ export async function ensureSchema() {
     ALTER TABLE tasks
       ADD COLUMN IF NOT EXISTS list_type text NOT NULL DEFAULT 'short';
 
+    ALTER TABLE tasks
+      ADD COLUMN IF NOT EXISTS weekly_days text NOT NULL DEFAULT '';
+
+    ALTER TABLE tasks
+      ADD COLUMN IF NOT EXISTS repeat_count integer;
+
+    ALTER TABLE tasks
+      ADD COLUMN IF NOT EXISTS repeat_start_date date;
+
     ALTER TABLE transactions
       ADD COLUMN IF NOT EXISTS transaction_type text NOT NULL DEFAULT 'expense';
 

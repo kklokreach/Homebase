@@ -43,6 +43,16 @@ window.addEventListener("unhandledrejection", (event) => {
   showFatal(reason?.stack || reason?.message || String(reason));
 });
 
+function registerServiceWorker() {
+  if (!("serviceWorker" in navigator)) return;
+
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/sw.js").catch((err) => {
+      console.warn("Homebase service worker registration failed", err);
+    });
+  });
+}
+
 async function boot() {
   try {
     const [{ default: App }, apiClient] = await Promise.all([
@@ -53,6 +63,7 @@ async function boot() {
     apiClient.setBaseUrl(getApiOrigin());
 
     createRoot(document.getElementById("root")!).render(<App />);
+    registerServiceWorker();
   } catch (err) {
     showFatal(err instanceof Error ? err.stack || err.message : String(err));
   }

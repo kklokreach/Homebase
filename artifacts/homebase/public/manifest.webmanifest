@@ -1,0 +1,24 @@
+{
+  "name": "Homebase",
+  "short_name": "Homebase",
+  "description": "Household tasks, notes, budget, and planning.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#FFF7F2",
+  "theme_color": "#FF3C00",
+  "icons": [
+    {
+      "src": "/pwa-icon.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/favicon.svg",
+      "sizes": "180x180",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

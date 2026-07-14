@@ -28,6 +28,9 @@ export interface Task {
   notes?: string | null;
   category?: string | null;
   listType?: "short" | "long" | "weekly";
+  weeklyDays?: number[];
+  repeatCount?: number | null;
+  repeatStartDate?: string | null;
   completed: boolean;
   completedAt?: string | null;
   createdAt: string;
@@ -52,6 +55,9 @@ export interface CreateTaskBody {
   notes?: string | null;
   category?: string | null;
   listType?: "short" | "long" | "weekly";
+  weeklyDays?: number[];
+  repeatCount?: number | null;
+  repeatStartDate?: string | null;
 }
 
 export type UpdateTaskBodyAssignee =
@@ -72,6 +78,9 @@ export interface UpdateTaskBody {
   notes?: string | null;
   category?: string | null;
   listType?: "short" | "long" | "weekly";
+  weeklyDays?: number[];
+  repeatCount?: number | null;
+  repeatStartDate?: string | null;
   completed?: boolean;
 }
 

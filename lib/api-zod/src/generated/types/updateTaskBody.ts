@@ -15,5 +15,8 @@ export interface UpdateTaskBody {
   notes?: string | null;
   category?: string | null;
   listType?: "short" | "long" | "weekly";
+  weeklyDays?: number[];
+  repeatCount?: number | null;
+  repeatStartDate?: Date | null;
   completed?: boolean;
 }
