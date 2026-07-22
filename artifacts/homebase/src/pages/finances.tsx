@@ -1078,9 +1078,10 @@ export default function Finances() {
 
   function renderBudgetCategory(cat: DashboardCategory) {
     const incomeAllocated = cat.incomeAllocated ?? 0;
+    const spendable = cat.available + incomeAllocated;
     const percent =
-      cat.available > 0
-        ? Math.max(0, Math.min(100, (cat.spent / cat.available) * 100))
+      spendable > 0
+        ? Math.max(0, Math.min(100, (cat.spent / spendable) * 100))
         : 0;
     const groupKey = `category-${cat.categoryId}`;
     const group = groupedTransactions.get(groupKey);

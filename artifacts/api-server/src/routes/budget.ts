@@ -339,6 +339,7 @@ function computeRolloversFromRows(
   categories: { id: number }[],
   priorBudgets: MonthlyBudgetRow[],
   priorSpendingEntries: SpendingEntry[],
+  priorIncomeAllocationEntries: SpendingEntry[],
   year: number,
   month: number,
 ) {
@@ -356,9 +357,12 @@ function computeRolloversFromRows(
       const spent = priorSpendingEntries
         .filter((entry) => entry.categoryId === cat.id && entry.date.startsWith(prefix))
         .reduce((sum, entry) => sum + entry.amount, 0);
+      const incomeAllocated = priorIncomeAllocationEntries
+        .filter((entry) => entry.categoryId === cat.id && entry.date.startsWith(prefix))
+        .reduce((sum, entry) => sum + entry.amount, 0);
       const budgeted = baseBudgetAmount(budget, runningLeft);
       const available = budgeted + effectiveRollover(budget, runningLeft);
-      runningLeft = moneyForApi(available - spent);
+      runningLeft = moneyForApi(available + incomeAllocated - spent);
     }
 
     rollovers.set(cat.id, runningLeft);
@@ -399,6 +403,7 @@ async function ensureMonthlyBudgetRows(
       .from(transactionsTable)
       .where(sql`${transactionsTable.date} < ${cutoff}`);
     const priorSpendingEntries = await buildSpendingEntries(priorTxns);
+    const priorIncomeAllocationEntries = await buildIncomeAllocationEntries(priorTxns);
 
     const priorBudgets = await tx
       .select()
@@ -418,6 +423,7 @@ async function ensureMonthlyBudgetRows(
       categories,
       priorBudgets,
       priorSpendingEntries,
+      priorIncomeAllocationEntries,
       previousMonth.year,
       previousMonth.month,
     );
@@ -923,7 +929,8 @@ router.delete("/transactions/:id", async (req, res): Promise<void> => {
  *  1. Gather every month-budget row that predates the requested month,
  *     sorted chronologically.
  *  2. Walk through them in order, tracking a running "left" balance.
- *     Each month: available = budgeted + runningLeft ; left = available - spent.
+ *     Each month: available = budgeted + runningLeft ;
+ *     left = available + allocated income - spent.
  *  3. The final runningLeft after processing all prior months becomes the
  *     rollover for the requested month.
  *
@@ -960,7 +967,15 @@ async function computeRollovers(
     .from(transactionsTable)
     .where(sql`${transactionsTable.date} < ${cutoff}`);
   const priorSpendingEntries = await buildSpendingEntries(priorTxns);
-  return computeRolloversFromRows(categories, priorBudgets, priorSpendingEntries, year, month);
+  const priorIncomeAllocationEntries = await buildIncomeAllocationEntries(priorTxns);
+  return computeRolloversFromRows(
+    categories,
+    priorBudgets,
+    priorSpendingEntries,
+    priorIncomeAllocationEntries,
+    year,
+    month,
+  );
 }
 
 router.get("/budget/dashboard", async (req, res): Promise<void> => {
@@ -1020,7 +1035,7 @@ router.get("/budget/dashboard", async (req, res): Promise<void> => {
       .reduce((sum, entry) => sum + entry.amount, 0);
 
     const available = moneyForApi(budgeted + rollover);
-    const left = moneyForApi(available - spent);
+    const left = moneyForApi(available + incomeAllocated - spent);
 
     return {
       categoryId: cat.id,
@@ -1040,8 +1055,9 @@ router.get("/budget/dashboard", async (req, res): Promise<void> => {
   const totalBudgeted = lines.reduce((s, l) => s + l.budgeted, 0);
   const totalRollover = lines.reduce((s, l) => s + l.rollover, 0);
   const totalAvailable = lines.reduce((s, l) => s + l.available, 0);
+  const totalIncomeAllocated = lines.reduce((s, l) => s + l.incomeAllocated, 0);
   const totalSpent = spendingEntries.reduce((s, entry) => s + entry.amount, 0);
-  const totalLeft = totalAvailable - totalSpent;
+  const totalLeft = moneyForApi(totalAvailable + totalIncomeAllocated - totalSpent);
   const incomeAmount = Number(monthlyIncome?.amount ?? 0);
   const incomeRemaining = moneyForApi(incomeTransactionsTotal - totalSpent);
   const budgetOverUnder = incomeAmount - totalBudgeted;
@@ -1179,6 +1195,7 @@ router.get("/home/snapshot", async (_req, res): Promise<void> => {
     sql`${transactionsTable.date} LIKE ${prefix + "%"}`,
   );
   const spendingEntries = await buildSpendingEntries(txns);
+  const incomeAllocationEntries = await buildIncomeAllocationEntries(txns);
   const incomeTransactionsTotal = txns
     .filter((txn) => normalizeTransactionType(txn.transactionType) === "income")
     .reduce((sum, txn) => sum + Number(txn.amount), 0);
@@ -1197,8 +1214,11 @@ router.get("/home/snapshot", async (_req, res): Promise<void> => {
     return sum + effectiveRollover(budget, computedRollover);
   }, 0);
   const totalSpent = spendingEntries.reduce((s, entry) => s + entry.amount, 0);
+  const totalIncomeAllocated = incomeAllocationEntries
+    .filter((entry) => entry.categoryId != null)
+    .reduce((sum, entry) => sum + entry.amount, 0);
   const totalAvailable = moneyForApi(totalBudgeted + totalRollover);
-  const totalLeft = moneyForApi(totalAvailable - totalSpent);
+  const totalLeft = moneyForApi(totalAvailable + totalIncomeAllocated - totalSpent);
   const incomeAmount = Number(monthlyIncome?.amount ?? 0);
 
   // Recent transactions
