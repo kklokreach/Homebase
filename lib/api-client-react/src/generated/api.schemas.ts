@@ -19,6 +19,20 @@ export const TaskAssignee = {
   us: "us",
 } as const;
 
+export type TaskListType = (typeof TaskListType)[keyof typeof TaskListType];
+
+export const TaskListType = {
+  short: "short",
+  long: "long",
+  weekly: "weekly",
+} as const;
+
+export type TaskSubtaskSummary = {
+  total: number;
+  completed: number;
+  progress: number;
+};
+
 export interface Task {
   id: number;
   title: string;
@@ -27,14 +41,19 @@ export interface Task {
   recurring?: string | null;
   notes?: string | null;
   category?: string | null;
-  listType?: "short" | "long" | "weekly";
+  listType?: TaskListType;
   weeklyDays?: number[];
+  /** @minimum 1 */
   repeatCount?: number | null;
   repeatStartDate?: string | null;
+  parentTaskId?: number | null;
+  sortOrder?: number;
   completed: boolean;
   completedAt?: string | null;
   createdAt: string;
   updatedAt: string;
+  subtaskSummary?: TaskSubtaskSummary;
+  subtasks?: Task[];
 }
 
 export type CreateTaskBodyAssignee =
@@ -47,6 +66,15 @@ export const CreateTaskBodyAssignee = {
   us: "us",
 } as const;
 
+export type CreateTaskBodyListType =
+  (typeof CreateTaskBodyListType)[keyof typeof CreateTaskBodyListType];
+
+export const CreateTaskBodyListType = {
+  short: "short",
+  long: "long",
+  weekly: "weekly",
+} as const;
+
 export interface CreateTaskBody {
   title: string;
   assignee?: CreateTaskBodyAssignee;
@@ -54,10 +82,13 @@ export interface CreateTaskBody {
   recurring?: string | null;
   notes?: string | null;
   category?: string | null;
-  listType?: "short" | "long" | "weekly";
+  listType?: CreateTaskBodyListType;
   weeklyDays?: number[];
+  /** @minimum 1 */
   repeatCount?: number | null;
   repeatStartDate?: string | null;
+  parentTaskId?: number | null;
+  sortOrder?: number;
 }
 
 export type UpdateTaskBodyAssignee =
@@ -70,6 +101,15 @@ export const UpdateTaskBodyAssignee = {
   us: "us",
 } as const;
 
+export type UpdateTaskBodyListType =
+  (typeof UpdateTaskBodyListType)[keyof typeof UpdateTaskBodyListType];
+
+export const UpdateTaskBodyListType = {
+  short: "short",
+  long: "long",
+  weekly: "weekly",
+} as const;
+
 export interface UpdateTaskBody {
   title?: string;
   assignee?: UpdateTaskBodyAssignee;
@@ -77,10 +117,13 @@ export interface UpdateTaskBody {
   recurring?: string | null;
   notes?: string | null;
   category?: string | null;
-  listType?: "short" | "long" | "weekly";
+  listType?: UpdateTaskBodyListType;
   weeklyDays?: number[];
+  /** @minimum 1 */
   repeatCount?: number | null;
   repeatStartDate?: string | null;
+  parentTaskId?: number | null;
+  sortOrder?: number;
   completed?: boolean;
 }
 
@@ -135,12 +178,23 @@ export interface UpsertMonthlyBudgetBody {
   rolloverOverride?: number | null;
 }
 
-export type TransactionType = "expense" | "income";
+export type TransactionType =
+  (typeof TransactionType)[keyof typeof TransactionType];
+
+export const TransactionType = {
+  expense: "expense",
+  income: "income",
+} as const;
 
 export interface TransactionSplit {
   id?: number | null;
   categoryId?: number | null;
   categoryName?: string | null;
+  amount: number;
+}
+
+export interface TransactionSplitInput {
+  categoryId?: number | null;
   amount: number;
 }
 
@@ -162,7 +216,7 @@ export interface CreateTransactionBody {
   amount: number;
   merchant: string;
   categoryId?: number | null;
-  splits?: Pick<TransactionSplit, "categoryId" | "amount">[];
+  splits?: TransactionSplitInput[];
   date?: string | null;
   notes?: string | null;
 }
@@ -172,9 +226,165 @@ export interface UpdateTransactionBody {
   amount?: number;
   merchant?: string;
   categoryId?: number | null;
-  splits?: Pick<TransactionSplit, "categoryId" | "amount">[];
+  splits?: TransactionSplitInput[];
   date?: string;
   notes?: string | null;
+}
+
+export interface ReserveFund {
+  id: number;
+  name: string;
+  icon?: string | null;
+  color?: string | null;
+  sortOrder: number;
+  targetAmount?: number | null;
+  balance: number;
+  progress?: number | null;
+  transactionCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateReserveFundBody {
+  name: string;
+  icon?: string | null;
+  color?: string | null;
+  sortOrder?: number;
+  targetAmount?: number | null;
+}
+
+export interface UpdateReserveFundBody {
+  name?: string;
+  icon?: string | null;
+  color?: string | null;
+  sortOrder?: number;
+  targetAmount?: number | null;
+}
+
+export type ReserveTransactionType =
+  (typeof ReserveTransactionType)[keyof typeof ReserveTransactionType];
+
+export const ReserveTransactionType = {
+  contribution: "contribution",
+  withdrawal: "withdrawal",
+  adjustment: "adjustment",
+} as const;
+
+export interface ReserveTransaction {
+  id: number;
+  reserveFundId: number;
+  reserveFundName: string;
+  type: ReserveTransactionType;
+  amount: number;
+  date: string;
+  notes?: string | null;
+  createdAt: string;
+}
+
+export interface CreateReserveTransactionBody {
+  reserveFundId: number;
+  type: ReserveTransactionType;
+  amount: number;
+  date?: string | null;
+  notes?: string | null;
+}
+
+export interface UpdateReserveTransactionBody {
+  reserveFundId?: number;
+  type?: ReserveTransactionType;
+  amount?: number;
+  date?: string;
+  notes?: string | null;
+}
+
+export interface MonthlyReview {
+  id: number;
+  year: number;
+  month: number;
+  notes?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface UpdateMonthlyReviewBody {
+  notes?: string | null;
+}
+
+export interface MonthlyReviewBudgetCategory {
+  categoryId: number;
+  categoryName: string;
+  budgeted: number;
+  computedRollover: number;
+  rolloverOverride: number | null;
+  rollover: number;
+  available: number;
+  spent: number;
+  left: number;
+}
+
+export interface MonthlyReviewBudgetSummary {
+  year: number;
+  month: number;
+  totalBudgeted: number;
+  totalRollover: number;
+  totalAvailable: number;
+  totalSpent: number;
+  totalLeft: number;
+  overBudgetCount: number;
+  underBudgetCount: number;
+  categories: MonthlyReviewBudgetCategory[];
+}
+
+export interface MonthlyReviewFundSummaryItem {
+  id: number;
+  name: string;
+  targetAmount?: number | null;
+  balance: number;
+  monthlyChange: number;
+  progress?: number | null;
+}
+
+export interface MonthlyReviewFundsSummary {
+  year: number;
+  month: number;
+  totalBalance: number;
+  totalMonthlyChange: number;
+  funds: MonthlyReviewFundSummaryItem[];
+}
+
+export interface MonthlyReviewAccountSnapshot {
+  id: number;
+  monthlyReviewId: number;
+  accountName: string;
+  accountType?: string | null;
+  balance: number;
+  sortOrder: number;
+  notes?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateMonthlyReviewAccountSnapshotBody {
+  accountName: string;
+  accountType?: string | null;
+  balance: number;
+  sortOrder?: number;
+  notes?: string | null;
+}
+
+export interface UpdateMonthlyReviewAccountSnapshotBody {
+  accountName?: string;
+  accountType?: string | null;
+  balance?: number;
+  sortOrder?: number;
+  notes?: string | null;
+}
+
+export interface MonthlyReviewPayload {
+  review: MonthlyReview;
+  budgetReview: MonthlyReviewBudgetSummary;
+  fundsReview: MonthlyReviewFundsSummary;
+  accountSnapshots: MonthlyReviewAccountSnapshot[];
 }
 
 export interface BudgetCategoryLine {
@@ -183,9 +393,10 @@ export interface BudgetCategoryLine {
   categoryGroupName?: string | null;
   budgeted: number;
   computedRollover: number;
-  rolloverOverride?: number | null;
+  rolloverOverride: number | null;
   rollover: number;
   available: number;
+  incomeAllocated: number;
   spent: number;
   left: number;
 }
@@ -247,7 +458,7 @@ export interface HomeSnapshot {
 export type ListTasksParams = {
   assignee?: ListTasksAssignee;
   view?: ListTasksView;
-  listType?: "short" | "long" | "weekly";
+  listType?: ListTasksListType;
   completed?: boolean;
 };
 
@@ -270,6 +481,15 @@ export const ListTasksView = {
   shared: "shared",
 } as const;
 
+export type ListTasksListType =
+  (typeof ListTasksListType)[keyof typeof ListTasksListType];
+
+export const ListTasksListType = {
+  short: "short",
+  long: "long",
+  weekly: "weekly",
+} as const;
+
 export type CompleteTaskBody = {
   completed: boolean;
 };
@@ -284,6 +504,16 @@ export type ListTransactionsParams = {
   month?: number;
   categoryId?: number;
   limit?: number;
+};
+
+export type ListReserveTransactionsParams = {
+  reserveFundId?: number;
+  limit?: number;
+};
+
+export type GetMonthlyReviewParams = {
+  year: number;
+  month: number;
 };
 
 export type GetBudgetDashboardParams = {

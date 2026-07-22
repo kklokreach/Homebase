@@ -5,16 +5,15 @@
  * Homebase household management API
  * OpenAPI spec version: 0.1.0
  */
+import type { TransactionSplitInput } from "./transactionSplitInput";
+import type { TransactionType } from "./transactionType";
 
 export interface UpdateTransactionBody {
-  type?: "expense" | "income";
+  type?: TransactionType;
   amount?: number;
   merchant?: string;
   categoryId?: number | null;
-  splits?: {
-    categoryId?: number | null;
-    amount: number;
-  }[];
+  splits?: TransactionSplitInput[];
   date?: Date;
   notes?: string | null;
 }

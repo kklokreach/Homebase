@@ -6,11 +6,12 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { ListTasksAssignee } from "./listTasksAssignee";
+import type { ListTasksListType } from "./listTasksListType";
 import type { ListTasksView } from "./listTasksView";
 
 export type ListTasksParams = {
   assignee?: ListTasksAssignee;
   view?: ListTasksView;
-  listType?: "short" | "long" | "weekly";
+  listType?: ListTasksListType;
   completed?: boolean;
 };

@@ -6,16 +6,14 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface BudgetCategoryLine {
+export interface MonthlyReviewBudgetCategory {
   categoryId: number;
   categoryName: string;
-  categoryGroupName?: string | null;
   budgeted: number;
   computedRollover: number;
   rolloverOverride: number | null;
   rollover: number;
   available: number;
-  incomeAllocated: number;
   spent: number;
   left: number;
 }

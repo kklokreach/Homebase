@@ -1038,7 +1038,7 @@ components:
         splits:
           type: array
           items:
-            $ref: "#/components/schemas/TransactionSplitInput"
+            $ref: "#/components/schemas/TransactionSplit"
         date:
           type: string
           format: date
@@ -1090,7 +1090,7 @@ components:
         splits:
           type: array
           items:
-            $ref: "#/components/schemas/TransactionSplit"
+            $ref: "#/components/schemas/TransactionSplitInput"
         date:
           type: string
           format: date
@@ -1424,17 +1424,27 @@ components:
           type: integer
         categoryName:
           type: string
+        categoryGroupName:
+          type: string
+          nullable: true
         budgeted:
           type: number
+        computedRollover:
+          type: number
+        rolloverOverride:
+          type: number
+          nullable: true
         rollover:
           type: number
         available:
+          type: number
+        incomeAllocated:
           type: number
         spent:
           type: number
         left:
           type: number
-      required: [categoryId, categoryName, budgeted, rollover, available, spent, left]
+      required: [categoryId, categoryName, budgeted, computedRollover, rolloverOverride, rollover, available, incomeAllocated, spent, left]
 
     BudgetDashboard:
       type: object

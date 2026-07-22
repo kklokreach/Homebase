@@ -24,6 +24,9 @@ export const ListTasksQueryParams = zod.object({
   completed: zod.coerce.boolean().optional(),
 });
 
+export const listTasksResponseWeeklyDaysItemMin = 0;
+export const listTasksResponseWeeklyDaysItemMax = 6;
+
 export const ListTasksResponseItem = zod.object({
   id: zod.number(),
   title: zod.string(),
@@ -40,8 +43,15 @@ export const ListTasksResponseItem = zod.object({
   notes: zod.string().nullish(),
   category: zod.string().nullish(),
   listType: zod.enum(["short", "long", "weekly"]).optional(),
-  weeklyDays: zod.array(zod.number()).optional(),
-  repeatCount: zod.number().nullish(),
+  weeklyDays: zod
+    .array(
+      zod
+        .number()
+        .min(listTasksResponseWeeklyDaysItemMin)
+        .max(listTasksResponseWeeklyDaysItemMax),
+    )
+    .optional(),
+  repeatCount: zod.number().min(1).nullish(),
   repeatStartDate: zod.coerce.date().nullish(),
   parentTaskId: zod.number().nullish(),
   sortOrder: zod.number().optional(),
@@ -63,6 +73,9 @@ export const ListTasksResponse = zod.array(ListTasksResponseItem);
 /**
  * @summary Create a new task
  */
+export const createTaskBodyWeeklyDaysItemMin = 0;
+export const createTaskBodyWeeklyDaysItemMax = 6;
+
 export const CreateTaskBody = zod.object({
   title: zod.string(),
   assignee: zod
@@ -78,10 +91,17 @@ export const CreateTaskBody = zod.object({
   notes: zod.string().nullish(),
   category: zod.string().nullish(),
   listType: zod.enum(["short", "long", "weekly"]).optional(),
-  weeklyDays: zod.array(zod.number()).optional(),
-  repeatCount: zod.number().nullish(),
+  weeklyDays: zod
+    .array(
+      zod
+        .number()
+        .min(createTaskBodyWeeklyDaysItemMin)
+        .max(createTaskBodyWeeklyDaysItemMax),
+    )
+    .optional(),
+  repeatCount: zod.number().min(1).nullish(),
   repeatStartDate: zod.coerce.date().nullish(),
-  parentTaskId: zod.coerce.number().nullish(),
+  parentTaskId: zod.number().nullish(),
   sortOrder: zod.number().optional(),
 });
 
@@ -91,6 +111,9 @@ export const CreateTaskBody = zod.object({
 export const GetTaskParams = zod.object({
   id: zod.coerce.number(),
 });
+
+export const getTaskResponseWeeklyDaysItemMin = 0;
+export const getTaskResponseWeeklyDaysItemMax = 6;
 
 export const GetTaskResponse = zod.object({
   id: zod.number(),
@@ -108,8 +131,15 @@ export const GetTaskResponse = zod.object({
   notes: zod.string().nullish(),
   category: zod.string().nullish(),
   listType: zod.enum(["short", "long", "weekly"]).optional(),
-  weeklyDays: zod.array(zod.number()).optional(),
-  repeatCount: zod.number().nullish(),
+  weeklyDays: zod
+    .array(
+      zod
+        .number()
+        .min(getTaskResponseWeeklyDaysItemMin)
+        .max(getTaskResponseWeeklyDaysItemMax),
+    )
+    .optional(),
+  repeatCount: zod.number().min(1).nullish(),
   repeatStartDate: zod.coerce.date().nullish(),
   parentTaskId: zod.number().nullish(),
   sortOrder: zod.number().optional(),
@@ -134,6 +164,9 @@ export const UpdateTaskParams = zod.object({
   id: zod.coerce.number(),
 });
 
+export const updateTaskBodyWeeklyDaysItemMin = 0;
+export const updateTaskBodyWeeklyDaysItemMax = 6;
+
 export const UpdateTaskBody = zod.object({
   title: zod.string().optional(),
   assignee: zod
@@ -149,13 +182,23 @@ export const UpdateTaskBody = zod.object({
   notes: zod.string().nullish(),
   category: zod.string().nullish(),
   listType: zod.enum(["short", "long", "weekly"]).optional(),
-  weeklyDays: zod.array(zod.number()).optional(),
-  repeatCount: zod.number().nullish(),
+  weeklyDays: zod
+    .array(
+      zod
+        .number()
+        .min(updateTaskBodyWeeklyDaysItemMin)
+        .max(updateTaskBodyWeeklyDaysItemMax),
+    )
+    .optional(),
+  repeatCount: zod.number().min(1).nullish(),
   repeatStartDate: zod.coerce.date().nullish(),
-  parentTaskId: zod.coerce.number().nullish(),
+  parentTaskId: zod.number().nullish(),
   sortOrder: zod.number().optional(),
   completed: zod.boolean().optional(),
 });
+
+export const updateTaskResponseWeeklyDaysItemMin = 0;
+export const updateTaskResponseWeeklyDaysItemMax = 6;
 
 export const UpdateTaskResponse = zod.object({
   id: zod.number(),
@@ -173,8 +216,15 @@ export const UpdateTaskResponse = zod.object({
   notes: zod.string().nullish(),
   category: zod.string().nullish(),
   listType: zod.enum(["short", "long", "weekly"]).optional(),
-  weeklyDays: zod.array(zod.number()).optional(),
-  repeatCount: zod.number().nullish(),
+  weeklyDays: zod
+    .array(
+      zod
+        .number()
+        .min(updateTaskResponseWeeklyDaysItemMin)
+        .max(updateTaskResponseWeeklyDaysItemMax),
+    )
+    .optional(),
+  repeatCount: zod.number().min(1).nullish(),
   repeatStartDate: zod.coerce.date().nullish(),
   parentTaskId: zod.number().nullish(),
   sortOrder: zod.number().optional(),
@@ -210,6 +260,9 @@ export const CompleteTaskBody = zod.object({
   completed: zod.boolean(),
 });
 
+export const completeTaskResponseWeeklyDaysItemMin = 0;
+export const completeTaskResponseWeeklyDaysItemMax = 6;
+
 export const CompleteTaskResponse = zod.object({
   id: zod.number(),
   title: zod.string(),
@@ -226,8 +279,15 @@ export const CompleteTaskResponse = zod.object({
   notes: zod.string().nullish(),
   category: zod.string().nullish(),
   listType: zod.enum(["short", "long", "weekly"]).optional(),
-  weeklyDays: zod.array(zod.number()).optional(),
-  repeatCount: zod.number().nullish(),
+  weeklyDays: zod
+    .array(
+      zod
+        .number()
+        .min(completeTaskResponseWeeklyDaysItemMin)
+        .max(completeTaskResponseWeeklyDaysItemMax),
+    )
+    .optional(),
+  repeatCount: zod.number().min(1).nullish(),
   repeatStartDate: zod.coerce.date().nullish(),
   parentTaskId: zod.number().nullish(),
   sortOrder: zod.number().optional(),
@@ -248,6 +308,15 @@ export const CompleteTaskResponse = zod.object({
 /**
  * @summary Summary of today's tasks grouped by assignee
  */
+export const getTodaySummaryResponseMeItemWeeklyDaysItemMin = 0;
+export const getTodaySummaryResponseMeItemWeeklyDaysItemMax = 6;
+
+export const getTodaySummaryResponseWifeItemWeeklyDaysItemMin = 0;
+export const getTodaySummaryResponseWifeItemWeeklyDaysItemMax = 6;
+
+export const getTodaySummaryResponseSharedItemWeeklyDaysItemMin = 0;
+export const getTodaySummaryResponseSharedItemWeeklyDaysItemMax = 6;
+
 export const GetTodaySummaryResponse = zod.object({
   me: zod.array(
     zod.object({
@@ -266,10 +335,30 @@ export const GetTodaySummaryResponse = zod.object({
       notes: zod.string().nullish(),
       category: zod.string().nullish(),
       listType: zod.enum(["short", "long", "weekly"]).optional(),
+      weeklyDays: zod
+        .array(
+          zod
+            .number()
+            .min(getTodaySummaryResponseMeItemWeeklyDaysItemMin)
+            .max(getTodaySummaryResponseMeItemWeeklyDaysItemMax),
+        )
+        .optional(),
+      repeatCount: zod.number().min(1).nullish(),
+      repeatStartDate: zod.coerce.date().nullish(),
+      parentTaskId: zod.number().nullish(),
+      sortOrder: zod.number().optional(),
       completed: zod.boolean(),
       completedAt: zod.coerce.date().nullish(),
       createdAt: zod.coerce.date(),
       updatedAt: zod.coerce.date(),
+      subtaskSummary: zod
+        .object({
+          total: zod.number(),
+          completed: zod.number(),
+          progress: zod.number(),
+        })
+        .optional(),
+      subtasks: zod.array(zod.unknown()).optional(),
     }),
   ),
   wife: zod.array(
@@ -289,10 +378,30 @@ export const GetTodaySummaryResponse = zod.object({
       notes: zod.string().nullish(),
       category: zod.string().nullish(),
       listType: zod.enum(["short", "long", "weekly"]).optional(),
+      weeklyDays: zod
+        .array(
+          zod
+            .number()
+            .min(getTodaySummaryResponseWifeItemWeeklyDaysItemMin)
+            .max(getTodaySummaryResponseWifeItemWeeklyDaysItemMax),
+        )
+        .optional(),
+      repeatCount: zod.number().min(1).nullish(),
+      repeatStartDate: zod.coerce.date().nullish(),
+      parentTaskId: zod.number().nullish(),
+      sortOrder: zod.number().optional(),
       completed: zod.boolean(),
       completedAt: zod.coerce.date().nullish(),
       createdAt: zod.coerce.date(),
       updatedAt: zod.coerce.date(),
+      subtaskSummary: zod
+        .object({
+          total: zod.number(),
+          completed: zod.number(),
+          progress: zod.number(),
+        })
+        .optional(),
+      subtasks: zod.array(zod.unknown()).optional(),
     }),
   ),
   shared: zod.array(
@@ -312,10 +421,30 @@ export const GetTodaySummaryResponse = zod.object({
       notes: zod.string().nullish(),
       category: zod.string().nullish(),
       listType: zod.enum(["short", "long", "weekly"]).optional(),
+      weeklyDays: zod
+        .array(
+          zod
+            .number()
+            .min(getTodaySummaryResponseSharedItemWeeklyDaysItemMin)
+            .max(getTodaySummaryResponseSharedItemWeeklyDaysItemMax),
+        )
+        .optional(),
+      repeatCount: zod.number().min(1).nullish(),
+      repeatStartDate: zod.coerce.date().nullish(),
+      parentTaskId: zod.number().nullish(),
+      sortOrder: zod.number().optional(),
       completed: zod.boolean(),
       completedAt: zod.coerce.date().nullish(),
       createdAt: zod.coerce.date(),
       updatedAt: zod.coerce.date(),
+      subtaskSummary: zod
+        .object({
+          total: zod.number(),
+          completed: zod.number(),
+          progress: zod.number(),
+        })
+        .optional(),
+      subtasks: zod.array(zod.unknown()).optional(),
     }),
   ),
   totalToday: zod.number(),
@@ -431,23 +560,21 @@ export const ListTransactionsQueryParams = zod.object({
   limit: zod.coerce.number().optional(),
 });
 
-export const TransactionType = zod.enum(["expense", "income"]);
-
-export const TransactionSplit = zod.object({
-  id: zod.number().nullish(),
-  categoryId: zod.number().nullish(),
-  categoryName: zod.string().nullish(),
-  amount: zod.number(),
-});
-
 export const ListTransactionsResponseItem = zod.object({
   id: zod.number(),
-  type: TransactionType,
+  type: zod.enum(["expense", "income"]),
   amount: zod.number(),
   merchant: zod.string(),
   categoryId: zod.number().nullish(),
   categoryName: zod.string().nullish(),
-  splits: zod.array(TransactionSplit),
+  splits: zod.array(
+    zod.object({
+      id: zod.number().nullish(),
+      categoryId: zod.number().nullish(),
+      categoryName: zod.string().nullish(),
+      amount: zod.number(),
+    }),
+  ),
   date: zod.coerce.date(),
   notes: zod.string().nullish(),
   createdAt: zod.coerce.date(),
@@ -458,11 +585,18 @@ export const ListTransactionsResponse = zod.array(ListTransactionsResponseItem);
  * @summary Create a transaction
  */
 export const CreateTransactionBody = zod.object({
-  type: TransactionType.optional(),
+  type: zod.enum(["expense", "income"]).optional(),
   amount: zod.number(),
   merchant: zod.string(),
   categoryId: zod.number().nullish(),
-  splits: zod.array(TransactionSplit.omit({ id: true, categoryName: true })).optional(),
+  splits: zod
+    .array(
+      zod.object({
+        categoryId: zod.number().nullish(),
+        amount: zod.number(),
+      }),
+    )
+    .optional(),
   date: zod.coerce.date().nullish(),
   notes: zod.string().nullish(),
 });
@@ -475,23 +609,37 @@ export const UpdateTransactionParams = zod.object({
 });
 
 export const UpdateTransactionBody = zod.object({
-  type: TransactionType.optional(),
+  type: zod.enum(["expense", "income"]).optional(),
   amount: zod.number().optional(),
   merchant: zod.string().optional(),
   categoryId: zod.number().nullish(),
-  splits: zod.array(TransactionSplit.omit({ id: true, categoryName: true })).optional(),
+  splits: zod
+    .array(
+      zod.object({
+        categoryId: zod.number().nullish(),
+        amount: zod.number(),
+      }),
+    )
+    .optional(),
   date: zod.coerce.date().optional(),
   notes: zod.string().nullish(),
 });
 
 export const UpdateTransactionResponse = zod.object({
   id: zod.number(),
-  type: TransactionType,
+  type: zod.enum(["expense", "income"]),
   amount: zod.number(),
   merchant: zod.string(),
   categoryId: zod.number().nullish(),
   categoryName: zod.string().nullish(),
-  splits: zod.array(TransactionSplit),
+  splits: zod.array(
+    zod.object({
+      id: zod.number().nullish(),
+      categoryId: zod.number().nullish(),
+      categoryName: zod.string().nullish(),
+      amount: zod.number(),
+    }),
+  ),
   date: zod.coerce.date(),
   notes: zod.string().nullish(),
   createdAt: zod.coerce.date(),
@@ -501,6 +649,278 @@ export const UpdateTransactionResponse = zod.object({
  * @summary Delete a transaction
  */
 export const DeleteTransactionParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+/**
+ * @summary List reserve funds with calculated balances
+ */
+export const ListReserveFundsResponseItem = zod.object({
+  id: zod.number(),
+  name: zod.string(),
+  icon: zod.string().nullish(),
+  color: zod.string().nullish(),
+  sortOrder: zod.number(),
+  targetAmount: zod.number().nullish(),
+  balance: zod.number(),
+  progress: zod.number().nullish(),
+  transactionCount: zod.number(),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date(),
+});
+export const ListReserveFundsResponse = zod.array(ListReserveFundsResponseItem);
+
+/**
+ * @summary Create a reserve fund
+ */
+export const CreateReserveFundBody = zod.object({
+  name: zod.string(),
+  icon: zod.string().nullish(),
+  color: zod.string().nullish(),
+  sortOrder: zod.number().optional(),
+  targetAmount: zod.number().nullish(),
+});
+
+/**
+ * @summary Update a reserve fund
+ */
+export const UpdateReserveFundParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const UpdateReserveFundBody = zod.object({
+  name: zod.string().optional(),
+  icon: zod.string().nullish(),
+  color: zod.string().nullish(),
+  sortOrder: zod.number().optional(),
+  targetAmount: zod.number().nullish(),
+});
+
+export const UpdateReserveFundResponse = zod.object({
+  id: zod.number(),
+  name: zod.string(),
+  icon: zod.string().nullish(),
+  color: zod.string().nullish(),
+  sortOrder: zod.number(),
+  targetAmount: zod.number().nullish(),
+  balance: zod.number(),
+  progress: zod.number().nullish(),
+  transactionCount: zod.number(),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date(),
+});
+
+/**
+ * @summary Delete a reserve fund
+ */
+export const DeleteReserveFundParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+/**
+ * @summary List reserve fund transactions
+ */
+export const ListReserveTransactionsQueryParams = zod.object({
+  reserveFundId: zod.coerce.number().optional(),
+  limit: zod.coerce.number().optional(),
+});
+
+export const ListReserveTransactionsResponseItem = zod.object({
+  id: zod.number(),
+  reserveFundId: zod.number(),
+  reserveFundName: zod.string(),
+  type: zod.enum(["contribution", "withdrawal", "adjustment"]),
+  amount: zod.number(),
+  date: zod.coerce.date(),
+  notes: zod.string().nullish(),
+  createdAt: zod.coerce.date(),
+});
+export const ListReserveTransactionsResponse = zod.array(
+  ListReserveTransactionsResponseItem,
+);
+
+/**
+ * @summary Create a reserve fund transaction
+ */
+export const CreateReserveTransactionBody = zod.object({
+  reserveFundId: zod.number(),
+  type: zod.enum(["contribution", "withdrawal", "adjustment"]),
+  amount: zod.number(),
+  date: zod.coerce.date().nullish(),
+  notes: zod.string().nullish(),
+});
+
+/**
+ * @summary Update a reserve fund transaction
+ */
+export const UpdateReserveTransactionParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const UpdateReserveTransactionBody = zod.object({
+  reserveFundId: zod.number().optional(),
+  type: zod.enum(["contribution", "withdrawal", "adjustment"]).optional(),
+  amount: zod.number().optional(),
+  date: zod.coerce.date().optional(),
+  notes: zod.string().nullish(),
+});
+
+export const UpdateReserveTransactionResponse = zod.object({
+  id: zod.number(),
+  reserveFundId: zod.number(),
+  reserveFundName: zod.string(),
+  type: zod.enum(["contribution", "withdrawal", "adjustment"]),
+  amount: zod.number(),
+  date: zod.coerce.date(),
+  notes: zod.string().nullish(),
+  createdAt: zod.coerce.date(),
+});
+
+/**
+ * @summary Delete a reserve fund transaction
+ */
+export const DeleteReserveTransactionParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+/**
+ * @summary Get or initialize a monthly review for a year and month
+ */
+export const GetMonthlyReviewQueryParams = zod.object({
+  year: zod.coerce.number(),
+  month: zod.coerce.number(),
+});
+
+export const GetMonthlyReviewResponse = zod.object({
+  review: zod.object({
+    id: zod.number(),
+    year: zod.number(),
+    month: zod.number(),
+    notes: zod.string().nullish(),
+    createdAt: zod.coerce.date(),
+    updatedAt: zod.coerce.date(),
+  }),
+  budgetReview: zod.object({
+    year: zod.number(),
+    month: zod.number(),
+    totalBudgeted: zod.number(),
+    totalRollover: zod.number(),
+    totalAvailable: zod.number(),
+    totalSpent: zod.number(),
+    totalLeft: zod.number(),
+    overBudgetCount: zod.number(),
+    underBudgetCount: zod.number(),
+    categories: zod.array(
+      zod.object({
+        categoryId: zod.number(),
+        categoryName: zod.string(),
+        budgeted: zod.number(),
+        computedRollover: zod.number(),
+        rolloverOverride: zod.number().nullable(),
+        rollover: zod.number(),
+        available: zod.number(),
+        spent: zod.number(),
+        left: zod.number(),
+      }),
+    ),
+  }),
+  fundsReview: zod.object({
+    year: zod.number(),
+    month: zod.number(),
+    totalBalance: zod.number(),
+    totalMonthlyChange: zod.number(),
+    funds: zod.array(
+      zod.object({
+        id: zod.number(),
+        name: zod.string(),
+        targetAmount: zod.number().nullish(),
+        balance: zod.number(),
+        monthlyChange: zod.number(),
+        progress: zod.number().nullish(),
+      }),
+    ),
+  }),
+  accountSnapshots: zod.array(
+    zod.object({
+      id: zod.number(),
+      monthlyReviewId: zod.number(),
+      accountName: zod.string(),
+      accountType: zod.string().nullish(),
+      balance: zod.number(),
+      sortOrder: zod.number(),
+      notes: zod.string().nullish(),
+      createdAt: zod.coerce.date(),
+      updatedAt: zod.coerce.date(),
+    }),
+  ),
+});
+
+/**
+ * @summary Update a monthly review
+ */
+export const UpdateMonthlyReviewParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const UpdateMonthlyReviewBody = zod.object({
+  notes: zod.string().nullish(),
+});
+
+export const UpdateMonthlyReviewResponse = zod.object({
+  id: zod.number(),
+  year: zod.number(),
+  month: zod.number(),
+  notes: zod.string().nullish(),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date(),
+});
+
+/**
+ * @summary Create an account snapshot for a monthly review
+ */
+export const CreateMonthlyReviewAccountSnapshotParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const CreateMonthlyReviewAccountSnapshotBody = zod.object({
+  accountName: zod.string(),
+  accountType: zod.string().nullish(),
+  balance: zod.number(),
+  sortOrder: zod.number().optional(),
+  notes: zod.string().nullish(),
+});
+
+/**
+ * @summary Update an account snapshot
+ */
+export const UpdateMonthlyReviewAccountSnapshotParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const UpdateMonthlyReviewAccountSnapshotBody = zod.object({
+  accountName: zod.string().optional(),
+  accountType: zod.string().nullish(),
+  balance: zod.number().optional(),
+  sortOrder: zod.number().optional(),
+  notes: zod.string().nullish(),
+});
+
+export const UpdateMonthlyReviewAccountSnapshotResponse = zod.object({
+  id: zod.number(),
+  monthlyReviewId: zod.number(),
+  accountName: zod.string(),
+  accountType: zod.string().nullish(),
+  balance: zod.number(),
+  sortOrder: zod.number(),
+  notes: zod.string().nullish(),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date(),
+});
+
+/**
+ * @summary Delete an account snapshot
+ */
+export const DeleteMonthlyReviewAccountSnapshotParams = zod.object({
   id: zod.coerce.number(),
 });
 
@@ -531,9 +951,10 @@ export const GetBudgetDashboardResponse = zod.object({
       categoryGroupName: zod.string().nullish(),
       budgeted: zod.number(),
       computedRollover: zod.number(),
-      rolloverOverride: zod.number().nullish(),
+      rolloverOverride: zod.number().nullable(),
       rollover: zod.number(),
       available: zod.number(),
+      incomeAllocated: zod.number(),
       spent: zod.number(),
       left: zod.number(),
     }),
@@ -541,12 +962,19 @@ export const GetBudgetDashboardResponse = zod.object({
   recentTransactions: zod.array(
     zod.object({
       id: zod.number(),
-      type: TransactionType,
+      type: zod.enum(["expense", "income"]),
       amount: zod.number(),
       merchant: zod.string(),
       categoryId: zod.number().nullish(),
       categoryName: zod.string().nullish(),
-      splits: zod.array(TransactionSplit),
+      splits: zod.array(
+        zod.object({
+          id: zod.number().nullish(),
+          categoryId: zod.number().nullish(),
+          categoryName: zod.string().nullish(),
+          amount: zod.number(),
+        }),
+      ),
       date: zod.coerce.date(),
       notes: zod.string().nullish(),
       createdAt: zod.coerce.date(),
@@ -585,6 +1013,15 @@ export const GetAnnualReviewResponse = zod.object({
 /**
  * @summary Home screen snapshot with tasks and budget summary
  */
+export const getHomeSnapshotResponseTodayTasksMeItemWeeklyDaysItemMin = 0;
+export const getHomeSnapshotResponseTodayTasksMeItemWeeklyDaysItemMax = 6;
+
+export const getHomeSnapshotResponseTodayTasksWifeItemWeeklyDaysItemMin = 0;
+export const getHomeSnapshotResponseTodayTasksWifeItemWeeklyDaysItemMax = 6;
+
+export const getHomeSnapshotResponseTodayTasksSharedItemWeeklyDaysItemMin = 0;
+export const getHomeSnapshotResponseTodayTasksSharedItemWeeklyDaysItemMax = 6;
+
 export const GetHomeSnapshotResponse = zod.object({
   todayTasks: zod.object({
     me: zod.array(
@@ -604,10 +1041,30 @@ export const GetHomeSnapshotResponse = zod.object({
         notes: zod.string().nullish(),
         category: zod.string().nullish(),
         listType: zod.enum(["short", "long", "weekly"]).optional(),
+        weeklyDays: zod
+          .array(
+            zod
+              .number()
+              .min(getHomeSnapshotResponseTodayTasksMeItemWeeklyDaysItemMin)
+              .max(getHomeSnapshotResponseTodayTasksMeItemWeeklyDaysItemMax),
+          )
+          .optional(),
+        repeatCount: zod.number().min(1).nullish(),
+        repeatStartDate: zod.coerce.date().nullish(),
+        parentTaskId: zod.number().nullish(),
+        sortOrder: zod.number().optional(),
         completed: zod.boolean(),
         completedAt: zod.coerce.date().nullish(),
         createdAt: zod.coerce.date(),
         updatedAt: zod.coerce.date(),
+        subtaskSummary: zod
+          .object({
+            total: zod.number(),
+            completed: zod.number(),
+            progress: zod.number(),
+          })
+          .optional(),
+        subtasks: zod.array(zod.unknown()).optional(),
       }),
     ),
     wife: zod.array(
@@ -627,10 +1084,30 @@ export const GetHomeSnapshotResponse = zod.object({
         notes: zod.string().nullish(),
         category: zod.string().nullish(),
         listType: zod.enum(["short", "long", "weekly"]).optional(),
+        weeklyDays: zod
+          .array(
+            zod
+              .number()
+              .min(getHomeSnapshotResponseTodayTasksWifeItemWeeklyDaysItemMin)
+              .max(getHomeSnapshotResponseTodayTasksWifeItemWeeklyDaysItemMax),
+          )
+          .optional(),
+        repeatCount: zod.number().min(1).nullish(),
+        repeatStartDate: zod.coerce.date().nullish(),
+        parentTaskId: zod.number().nullish(),
+        sortOrder: zod.number().optional(),
         completed: zod.boolean(),
         completedAt: zod.coerce.date().nullish(),
         createdAt: zod.coerce.date(),
         updatedAt: zod.coerce.date(),
+        subtaskSummary: zod
+          .object({
+            total: zod.number(),
+            completed: zod.number(),
+            progress: zod.number(),
+          })
+          .optional(),
+        subtasks: zod.array(zod.unknown()).optional(),
       }),
     ),
     shared: zod.array(
@@ -650,10 +1127,32 @@ export const GetHomeSnapshotResponse = zod.object({
         notes: zod.string().nullish(),
         category: zod.string().nullish(),
         listType: zod.enum(["short", "long", "weekly"]).optional(),
+        weeklyDays: zod
+          .array(
+            zod
+              .number()
+              .min(getHomeSnapshotResponseTodayTasksSharedItemWeeklyDaysItemMin)
+              .max(
+                getHomeSnapshotResponseTodayTasksSharedItemWeeklyDaysItemMax,
+              ),
+          )
+          .optional(),
+        repeatCount: zod.number().min(1).nullish(),
+        repeatStartDate: zod.coerce.date().nullish(),
+        parentTaskId: zod.number().nullish(),
+        sortOrder: zod.number().optional(),
         completed: zod.boolean(),
         completedAt: zod.coerce.date().nullish(),
         createdAt: zod.coerce.date(),
         updatedAt: zod.coerce.date(),
+        subtaskSummary: zod
+          .object({
+            total: zod.number(),
+            completed: zod.number(),
+            progress: zod.number(),
+          })
+          .optional(),
+        subtasks: zod.array(zod.unknown()).optional(),
       }),
     ),
     totalToday: zod.number(),
@@ -672,12 +1171,19 @@ export const GetHomeSnapshotResponse = zod.object({
   recentTransactions: zod.array(
     zod.object({
       id: zod.number(),
-      type: TransactionType,
+      type: zod.enum(["expense", "income"]),
       amount: zod.number(),
       merchant: zod.string(),
       categoryId: zod.number().nullish(),
       categoryName: zod.string().nullish(),
-      splits: zod.array(TransactionSplit),
+      splits: zod.array(
+        zod.object({
+          id: zod.number().nullish(),
+          categoryId: zod.number().nullish(),
+          categoryName: zod.string().nullish(),
+          amount: zod.number(),
+        }),
+      ),
       date: zod.coerce.date(),
       notes: zod.string().nullish(),
       createdAt: zod.coerce.date(),

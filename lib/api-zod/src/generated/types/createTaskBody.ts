@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { CreateTaskBodyAssignee } from "./createTaskBodyAssignee";
+import type { CreateTaskBodyListType } from "./createTaskBodyListType";
 
 export interface CreateTaskBody {
   title: string;
@@ -14,8 +15,11 @@ export interface CreateTaskBody {
   recurring?: string | null;
   notes?: string | null;
   category?: string | null;
-  listType?: "short" | "long" | "weekly";
+  listType?: CreateTaskBodyListType;
   weeklyDays?: number[];
+  /** @minimum 1 */
   repeatCount?: number | null;
   repeatStartDate?: Date | null;
+  parentTaskId?: number | null;
+  sortOrder?: number;
 }

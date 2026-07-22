@@ -187,7 +187,7 @@ function normalizeCategoryId(value: number | null | undefined) {
   return value;
 }
 
-function normalizeExpenseSplits(
+function normalizeTransactionSplits(
   amount: number,
   categoryId: number | null | undefined,
   splits: TransactionSplitInput[] | undefined,
@@ -239,11 +239,7 @@ function normalizeTransactionParts(
     return { error: "Transaction amount must be greater than 0." };
   }
 
-  if (type === "income") {
-    return { categoryId: null, splits: [] };
-  }
-
-  return normalizeExpenseSplits(amount, categoryId, splits);
+  return normalizeTransactionSplits(amount, categoryId, splits);
 }
 
 function transactionSelectFields() {
@@ -295,14 +291,15 @@ async function serializeTransactionRows(rows: TransactionRow[]) {
   return rows.map((row) => serializeTransaction(row, splitMap.get(row.id) ?? []));
 }
 
-async function buildSpendingEntries(
+async function buildCategoryAmountEntries(
   txns: { id: number; transactionType: string; amount: string | number; categoryId: number | null; date: string }[],
+  type: TransactionType,
 ): Promise<SpendingEntry[]> {
-  const expenseTxns = txns.filter((txn) => normalizeTransactionType(txn.transactionType) === "expense");
-  const splitMap = await loadTransactionSplits(expenseTxns.map((txn) => txn.id));
+  const matchingTxns = txns.filter((txn) => normalizeTransactionType(txn.transactionType) === type);
+  const splitMap = await loadTransactionSplits(matchingTxns.map((txn) => txn.id));
   const entries: SpendingEntry[] = [];
 
-  for (const txn of expenseTxns) {
+  for (const txn of matchingTxns) {
     const splits = splitMap.get(txn.id) ?? [];
 
     if (splits.length > 0) {
@@ -324,6 +321,18 @@ async function buildSpendingEntries(
   }
 
   return entries;
+}
+
+async function buildSpendingEntries(
+  txns: { id: number; transactionType: string; amount: string | number; categoryId: number | null; date: string }[],
+): Promise<SpendingEntry[]> {
+  return buildCategoryAmountEntries(txns, "expense");
+}
+
+async function buildIncomeAllocationEntries(
+  txns: { id: number; transactionType: string; amount: string | number; categoryId: number | null; date: string }[],
+): Promise<SpendingEntry[]> {
+  return buildCategoryAmountEntries(txns, "income");
 }
 
 function computeRolloversFromRows(
@@ -729,7 +738,7 @@ router.get("/transactions", async (req, res): Promise<void> => {
   const filtered = categoryId === undefined
     ? serialized
     : serialized.filter((txn) =>
-        txn.type === "expense" && txn.splits.some((split) => split.categoryId === categoryId),
+        txn.splits.some((split) => split.categoryId === categoryId),
       );
 
   res.json(limit ? filtered.slice(0, limit) : filtered);
@@ -984,6 +993,7 @@ router.get("/budget/dashboard", async (req, res): Promise<void> => {
     .from(transactionsTable)
     .where(sql`${transactionsTable.date} LIKE ${prefix + "%"}`);
   const spendingEntries = await buildSpendingEntries(txns);
+  const incomeAllocationEntries = await buildIncomeAllocationEntries(txns);
   const incomeTransactionsTotal = txns
     .filter((txn) => normalizeTransactionType(txn.transactionType) === "income")
     .reduce((sum, txn) => sum + Number(txn.amount), 0);
@@ -1005,6 +1015,9 @@ router.get("/budget/dashboard", async (req, res): Promise<void> => {
     const spent = spendingEntries
       .filter((entry) => entry.categoryId === cat.id)
       .reduce((sum, entry) => sum + entry.amount, 0);
+    const incomeAllocated = incomeAllocationEntries
+      .filter((entry) => entry.categoryId === cat.id)
+      .reduce((sum, entry) => sum + entry.amount, 0);
 
     const available = moneyForApi(budgeted + rollover);
     const left = moneyForApi(available - spent);
@@ -1018,6 +1031,7 @@ router.get("/budget/dashboard", async (req, res): Promise<void> => {
       rolloverOverride,
       rollover,
       available,
+      incomeAllocated,
       spent,
       left,
     };
@@ -1230,16 +1244,14 @@ function serializeTransaction(t: {
   createdAt: Date;
 }, splitRows: SerializedTransactionSplit[] = []) {
   const type = normalizeTransactionType(t.transactionType);
-  const splits = type === "expense"
-    ? splitRows.length > 0
-      ? splitRows
-      : [{
-          id: null,
-          categoryId: t.categoryId ?? null,
-          categoryName: t.categoryName ?? null,
-          amount: Number(t.amount),
-        }]
-    : [];
+  const splits = splitRows.length > 0
+    ? splitRows
+    : [{
+        id: null,
+        categoryId: t.categoryId ?? null,
+        categoryName: t.categoryName ?? null,
+        amount: Number(t.amount),
+      }];
   const primarySplit = splits.length === 1 ? splits[0] : null;
 
   return {
@@ -1247,10 +1259,8 @@ function serializeTransaction(t: {
     type,
     amount: Number(t.amount),
     merchant: t.merchant,
-    categoryId: type === "expense" ? primarySplit?.categoryId ?? null : null,
-    categoryName: type === "income"
-      ? "Income"
-      : primarySplit
+    categoryId: primarySplit?.categoryId ?? null,
+    categoryName: primarySplit
       ? primarySplit.categoryName
       : splits.length > 1
       ? "Split transaction"

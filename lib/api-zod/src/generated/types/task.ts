@@ -6,6 +6,8 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { TaskAssignee } from "./taskAssignee";
+import type { TaskListType } from "./taskListType";
+import type { TaskSubtaskSummary } from "./taskSubtaskSummary";
 
 export interface Task {
   id: number;
@@ -15,12 +17,17 @@ export interface Task {
   recurring?: string | null;
   notes?: string | null;
   category?: string | null;
-  listType?: "short" | "long" | "weekly";
+  listType?: TaskListType;
   weeklyDays?: number[];
+  /** @minimum 1 */
   repeatCount?: number | null;
   repeatStartDate?: Date | null;
+  parentTaskId?: number | null;
+  sortOrder?: number;
   completed: boolean;
   completedAt?: Date | null;
   createdAt: Date;
   updatedAt: Date;
+  subtaskSummary?: TaskSubtaskSummary;
+  subtasks?: Task[];
 }

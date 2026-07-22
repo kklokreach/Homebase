@@ -22,20 +22,34 @@ import type {
   BudgetDashboard,
   CompleteTaskBody,
   CreateBudgetCategoryBody,
+  CreateMonthlyReviewAccountSnapshotBody,
+  CreateReserveFundBody,
+  CreateReserveTransactionBody,
   CreateTaskBody,
   CreateTransactionBody,
   GetAnnualReviewParams,
   GetBudgetDashboardParams,
+  GetMonthlyReviewParams,
   HealthStatus,
   HomeSnapshot,
   ListMonthlyBudgetsParams,
+  ListReserveTransactionsParams,
   ListTasksParams,
   ListTransactionsParams,
   MonthlyBudget,
+  MonthlyReview,
+  MonthlyReviewAccountSnapshot,
+  MonthlyReviewPayload,
+  ReserveFund,
+  ReserveTransaction,
   Task,
   TodaySummary,
   Transaction,
   UpdateBudgetCategoryBody,
+  UpdateMonthlyReviewAccountSnapshotBody,
+  UpdateMonthlyReviewBody,
+  UpdateReserveFundBody,
+  UpdateReserveTransactionBody,
   UpdateTaskBody,
   UpdateTransactionBody,
   UpsertMonthlyBudgetBody,
@@ -1584,6 +1598,1159 @@ export const useDeleteTransaction = <
   TContext
 > => {
   return useMutation(getDeleteTransactionMutationOptions(options));
+};
+
+/**
+ * @summary List reserve funds with calculated balances
+ */
+export const getListReserveFundsUrl = () => {
+  return `/api/reserves/funds`;
+};
+
+export const listReserveFunds = async (
+  options?: RequestInit,
+): Promise<ReserveFund[]> => {
+  return customFetch<ReserveFund[]>(getListReserveFundsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListReserveFundsQueryKey = () => {
+  return [`/api/reserves/funds`] as const;
+};
+
+export const getListReserveFundsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listReserveFunds>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listReserveFunds>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListReserveFundsQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listReserveFunds>>
+  > = ({ signal }) => listReserveFunds({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listReserveFunds>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListReserveFundsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listReserveFunds>>
+>;
+export type ListReserveFundsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List reserve funds with calculated balances
+ */
+
+export function useListReserveFunds<
+  TData = Awaited<ReturnType<typeof listReserveFunds>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listReserveFunds>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListReserveFundsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Create a reserve fund
+ */
+export const getCreateReserveFundUrl = () => {
+  return `/api/reserves/funds`;
+};
+
+export const createReserveFund = async (
+  createReserveFundBody: CreateReserveFundBody,
+  options?: RequestInit,
+): Promise<ReserveFund> => {
+  return customFetch<ReserveFund>(getCreateReserveFundUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(createReserveFundBody),
+  });
+};
+
+export const getCreateReserveFundMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createReserveFund>>,
+    TError,
+    { data: BodyType<CreateReserveFundBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createReserveFund>>,
+  TError,
+  { data: BodyType<CreateReserveFundBody> },
+  TContext
+> => {
+  const mutationKey = ["createReserveFund"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createReserveFund>>,
+    { data: BodyType<CreateReserveFundBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createReserveFund(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateReserveFundMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createReserveFund>>
+>;
+export type CreateReserveFundMutationBody = BodyType<CreateReserveFundBody>;
+export type CreateReserveFundMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Create a reserve fund
+ */
+export const useCreateReserveFund = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createReserveFund>>,
+    TError,
+    { data: BodyType<CreateReserveFundBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createReserveFund>>,
+  TError,
+  { data: BodyType<CreateReserveFundBody> },
+  TContext
+> => {
+  return useMutation(getCreateReserveFundMutationOptions(options));
+};
+
+/**
+ * @summary Update a reserve fund
+ */
+export const getUpdateReserveFundUrl = (id: number) => {
+  return `/api/reserves/funds/${id}`;
+};
+
+export const updateReserveFund = async (
+  id: number,
+  updateReserveFundBody: UpdateReserveFundBody,
+  options?: RequestInit,
+): Promise<ReserveFund> => {
+  return customFetch<ReserveFund>(getUpdateReserveFundUrl(id), {
+    ...options,
+    method: "PUT",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(updateReserveFundBody),
+  });
+};
+
+export const getUpdateReserveFundMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateReserveFund>>,
+    TError,
+    { id: number; data: BodyType<UpdateReserveFundBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateReserveFund>>,
+  TError,
+  { id: number; data: BodyType<UpdateReserveFundBody> },
+  TContext
+> => {
+  const mutationKey = ["updateReserveFund"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateReserveFund>>,
+    { id: number; data: BodyType<UpdateReserveFundBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return updateReserveFund(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateReserveFundMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateReserveFund>>
+>;
+export type UpdateReserveFundMutationBody = BodyType<UpdateReserveFundBody>;
+export type UpdateReserveFundMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Update a reserve fund
+ */
+export const useUpdateReserveFund = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateReserveFund>>,
+    TError,
+    { id: number; data: BodyType<UpdateReserveFundBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateReserveFund>>,
+  TError,
+  { id: number; data: BodyType<UpdateReserveFundBody> },
+  TContext
+> => {
+  return useMutation(getUpdateReserveFundMutationOptions(options));
+};
+
+/**
+ * @summary Delete a reserve fund
+ */
+export const getDeleteReserveFundUrl = (id: number) => {
+  return `/api/reserves/funds/${id}`;
+};
+
+export const deleteReserveFund = async (
+  id: number,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getDeleteReserveFundUrl(id), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteReserveFundMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteReserveFund>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteReserveFund>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  const mutationKey = ["deleteReserveFund"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteReserveFund>>,
+    { id: number }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return deleteReserveFund(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteReserveFundMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteReserveFund>>
+>;
+
+export type DeleteReserveFundMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Delete a reserve fund
+ */
+export const useDeleteReserveFund = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteReserveFund>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteReserveFund>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  return useMutation(getDeleteReserveFundMutationOptions(options));
+};
+
+/**
+ * @summary List reserve fund transactions
+ */
+export const getListReserveTransactionsUrl = (
+  params?: ListReserveTransactionsParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/reserves/transactions?${stringifiedParams}`
+    : `/api/reserves/transactions`;
+};
+
+export const listReserveTransactions = async (
+  params?: ListReserveTransactionsParams,
+  options?: RequestInit,
+): Promise<ReserveTransaction[]> => {
+  return customFetch<ReserveTransaction[]>(
+    getListReserveTransactionsUrl(params),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getListReserveTransactionsQueryKey = (
+  params?: ListReserveTransactionsParams,
+) => {
+  return [`/api/reserves/transactions`, ...(params ? [params] : [])] as const;
+};
+
+export const getListReserveTransactionsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listReserveTransactions>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListReserveTransactionsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listReserveTransactions>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListReserveTransactionsQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listReserveTransactions>>
+  > = ({ signal }) =>
+    listReserveTransactions(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listReserveTransactions>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListReserveTransactionsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listReserveTransactions>>
+>;
+export type ListReserveTransactionsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List reserve fund transactions
+ */
+
+export function useListReserveTransactions<
+  TData = Awaited<ReturnType<typeof listReserveTransactions>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListReserveTransactionsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listReserveTransactions>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListReserveTransactionsQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Create a reserve fund transaction
+ */
+export const getCreateReserveTransactionUrl = () => {
+  return `/api/reserves/transactions`;
+};
+
+export const createReserveTransaction = async (
+  createReserveTransactionBody: CreateReserveTransactionBody,
+  options?: RequestInit,
+): Promise<ReserveTransaction> => {
+  return customFetch<ReserveTransaction>(getCreateReserveTransactionUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(createReserveTransactionBody),
+  });
+};
+
+export const getCreateReserveTransactionMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createReserveTransaction>>,
+    TError,
+    { data: BodyType<CreateReserveTransactionBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createReserveTransaction>>,
+  TError,
+  { data: BodyType<CreateReserveTransactionBody> },
+  TContext
+> => {
+  const mutationKey = ["createReserveTransaction"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createReserveTransaction>>,
+    { data: BodyType<CreateReserveTransactionBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createReserveTransaction(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateReserveTransactionMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createReserveTransaction>>
+>;
+export type CreateReserveTransactionMutationBody =
+  BodyType<CreateReserveTransactionBody>;
+export type CreateReserveTransactionMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Create a reserve fund transaction
+ */
+export const useCreateReserveTransaction = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createReserveTransaction>>,
+    TError,
+    { data: BodyType<CreateReserveTransactionBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createReserveTransaction>>,
+  TError,
+  { data: BodyType<CreateReserveTransactionBody> },
+  TContext
+> => {
+  return useMutation(getCreateReserveTransactionMutationOptions(options));
+};
+
+/**
+ * @summary Update a reserve fund transaction
+ */
+export const getUpdateReserveTransactionUrl = (id: number) => {
+  return `/api/reserves/transactions/${id}`;
+};
+
+export const updateReserveTransaction = async (
+  id: number,
+  updateReserveTransactionBody: UpdateReserveTransactionBody,
+  options?: RequestInit,
+): Promise<ReserveTransaction> => {
+  return customFetch<ReserveTransaction>(getUpdateReserveTransactionUrl(id), {
+    ...options,
+    method: "PUT",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(updateReserveTransactionBody),
+  });
+};
+
+export const getUpdateReserveTransactionMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateReserveTransaction>>,
+    TError,
+    { id: number; data: BodyType<UpdateReserveTransactionBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateReserveTransaction>>,
+  TError,
+  { id: number; data: BodyType<UpdateReserveTransactionBody> },
+  TContext
+> => {
+  const mutationKey = ["updateReserveTransaction"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateReserveTransaction>>,
+    { id: number; data: BodyType<UpdateReserveTransactionBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return updateReserveTransaction(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateReserveTransactionMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateReserveTransaction>>
+>;
+export type UpdateReserveTransactionMutationBody =
+  BodyType<UpdateReserveTransactionBody>;
+export type UpdateReserveTransactionMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Update a reserve fund transaction
+ */
+export const useUpdateReserveTransaction = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateReserveTransaction>>,
+    TError,
+    { id: number; data: BodyType<UpdateReserveTransactionBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateReserveTransaction>>,
+  TError,
+  { id: number; data: BodyType<UpdateReserveTransactionBody> },
+  TContext
+> => {
+  return useMutation(getUpdateReserveTransactionMutationOptions(options));
+};
+
+/**
+ * @summary Delete a reserve fund transaction
+ */
+export const getDeleteReserveTransactionUrl = (id: number) => {
+  return `/api/reserves/transactions/${id}`;
+};
+
+export const deleteReserveTransaction = async (
+  id: number,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getDeleteReserveTransactionUrl(id), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteReserveTransactionMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteReserveTransaction>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteReserveTransaction>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  const mutationKey = ["deleteReserveTransaction"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteReserveTransaction>>,
+    { id: number }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return deleteReserveTransaction(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteReserveTransactionMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteReserveTransaction>>
+>;
+
+export type DeleteReserveTransactionMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Delete a reserve fund transaction
+ */
+export const useDeleteReserveTransaction = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteReserveTransaction>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteReserveTransaction>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  return useMutation(getDeleteReserveTransactionMutationOptions(options));
+};
+
+/**
+ * @summary Get or initialize a monthly review for a year and month
+ */
+export const getGetMonthlyReviewUrl = (params: GetMonthlyReviewParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/reviews/monthly?${stringifiedParams}`
+    : `/api/reviews/monthly`;
+};
+
+export const getMonthlyReview = async (
+  params: GetMonthlyReviewParams,
+  options?: RequestInit,
+): Promise<MonthlyReviewPayload> => {
+  return customFetch<MonthlyReviewPayload>(getGetMonthlyReviewUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetMonthlyReviewQueryKey = (
+  params?: GetMonthlyReviewParams,
+) => {
+  return [`/api/reviews/monthly`, ...(params ? [params] : [])] as const;
+};
+
+export const getGetMonthlyReviewQueryOptions = <
+  TData = Awaited<ReturnType<typeof getMonthlyReview>>,
+  TError = ErrorType<unknown>,
+>(
+  params: GetMonthlyReviewParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getMonthlyReview>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetMonthlyReviewQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getMonthlyReview>>
+  > = ({ signal }) => getMonthlyReview(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getMonthlyReview>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetMonthlyReviewQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getMonthlyReview>>
+>;
+export type GetMonthlyReviewQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get or initialize a monthly review for a year and month
+ */
+
+export function useGetMonthlyReview<
+  TData = Awaited<ReturnType<typeof getMonthlyReview>>,
+  TError = ErrorType<unknown>,
+>(
+  params: GetMonthlyReviewParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getMonthlyReview>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetMonthlyReviewQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Update a monthly review
+ */
+export const getUpdateMonthlyReviewUrl = (id: number) => {
+  return `/api/reviews/monthly/${id}`;
+};
+
+export const updateMonthlyReview = async (
+  id: number,
+  updateMonthlyReviewBody: UpdateMonthlyReviewBody,
+  options?: RequestInit,
+): Promise<MonthlyReview> => {
+  return customFetch<MonthlyReview>(getUpdateMonthlyReviewUrl(id), {
+    ...options,
+    method: "PUT",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(updateMonthlyReviewBody),
+  });
+};
+
+export const getUpdateMonthlyReviewMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateMonthlyReview>>,
+    TError,
+    { id: number; data: BodyType<UpdateMonthlyReviewBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateMonthlyReview>>,
+  TError,
+  { id: number; data: BodyType<UpdateMonthlyReviewBody> },
+  TContext
+> => {
+  const mutationKey = ["updateMonthlyReview"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateMonthlyReview>>,
+    { id: number; data: BodyType<UpdateMonthlyReviewBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return updateMonthlyReview(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateMonthlyReviewMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateMonthlyReview>>
+>;
+export type UpdateMonthlyReviewMutationBody = BodyType<UpdateMonthlyReviewBody>;
+export type UpdateMonthlyReviewMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Update a monthly review
+ */
+export const useUpdateMonthlyReview = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateMonthlyReview>>,
+    TError,
+    { id: number; data: BodyType<UpdateMonthlyReviewBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateMonthlyReview>>,
+  TError,
+  { id: number; data: BodyType<UpdateMonthlyReviewBody> },
+  TContext
+> => {
+  return useMutation(getUpdateMonthlyReviewMutationOptions(options));
+};
+
+/**
+ * @summary Create an account snapshot for a monthly review
+ */
+export const getCreateMonthlyReviewAccountSnapshotUrl = (id: number) => {
+  return `/api/reviews/monthly/${id}/accounts`;
+};
+
+export const createMonthlyReviewAccountSnapshot = async (
+  id: number,
+  createMonthlyReviewAccountSnapshotBody: CreateMonthlyReviewAccountSnapshotBody,
+  options?: RequestInit,
+): Promise<MonthlyReviewAccountSnapshot> => {
+  return customFetch<MonthlyReviewAccountSnapshot>(
+    getCreateMonthlyReviewAccountSnapshotUrl(id),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(createMonthlyReviewAccountSnapshotBody),
+    },
+  );
+};
+
+export const getCreateMonthlyReviewAccountSnapshotMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createMonthlyReviewAccountSnapshot>>,
+    TError,
+    { id: number; data: BodyType<CreateMonthlyReviewAccountSnapshotBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createMonthlyReviewAccountSnapshot>>,
+  TError,
+  { id: number; data: BodyType<CreateMonthlyReviewAccountSnapshotBody> },
+  TContext
+> => {
+  const mutationKey = ["createMonthlyReviewAccountSnapshot"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createMonthlyReviewAccountSnapshot>>,
+    { id: number; data: BodyType<CreateMonthlyReviewAccountSnapshotBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return createMonthlyReviewAccountSnapshot(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateMonthlyReviewAccountSnapshotMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createMonthlyReviewAccountSnapshot>>
+>;
+export type CreateMonthlyReviewAccountSnapshotMutationBody =
+  BodyType<CreateMonthlyReviewAccountSnapshotBody>;
+export type CreateMonthlyReviewAccountSnapshotMutationError =
+  ErrorType<unknown>;
+
+/**
+ * @summary Create an account snapshot for a monthly review
+ */
+export const useCreateMonthlyReviewAccountSnapshot = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createMonthlyReviewAccountSnapshot>>,
+    TError,
+    { id: number; data: BodyType<CreateMonthlyReviewAccountSnapshotBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createMonthlyReviewAccountSnapshot>>,
+  TError,
+  { id: number; data: BodyType<CreateMonthlyReviewAccountSnapshotBody> },
+  TContext
+> => {
+  return useMutation(
+    getCreateMonthlyReviewAccountSnapshotMutationOptions(options),
+  );
+};
+
+/**
+ * @summary Update an account snapshot
+ */
+export const getUpdateMonthlyReviewAccountSnapshotUrl = (id: number) => {
+  return `/api/reviews/monthly/accounts/${id}`;
+};
+
+export const updateMonthlyReviewAccountSnapshot = async (
+  id: number,
+  updateMonthlyReviewAccountSnapshotBody: UpdateMonthlyReviewAccountSnapshotBody,
+  options?: RequestInit,
+): Promise<MonthlyReviewAccountSnapshot> => {
+  return customFetch<MonthlyReviewAccountSnapshot>(
+    getUpdateMonthlyReviewAccountSnapshotUrl(id),
+    {
+      ...options,
+      method: "PUT",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(updateMonthlyReviewAccountSnapshotBody),
+    },
+  );
+};
+
+export const getUpdateMonthlyReviewAccountSnapshotMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateMonthlyReviewAccountSnapshot>>,
+    TError,
+    { id: number; data: BodyType<UpdateMonthlyReviewAccountSnapshotBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateMonthlyReviewAccountSnapshot>>,
+  TError,
+  { id: number; data: BodyType<UpdateMonthlyReviewAccountSnapshotBody> },
+  TContext
+> => {
+  const mutationKey = ["updateMonthlyReviewAccountSnapshot"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateMonthlyReviewAccountSnapshot>>,
+    { id: number; data: BodyType<UpdateMonthlyReviewAccountSnapshotBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return updateMonthlyReviewAccountSnapshot(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateMonthlyReviewAccountSnapshotMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateMonthlyReviewAccountSnapshot>>
+>;
+export type UpdateMonthlyReviewAccountSnapshotMutationBody =
+  BodyType<UpdateMonthlyReviewAccountSnapshotBody>;
+export type UpdateMonthlyReviewAccountSnapshotMutationError =
+  ErrorType<unknown>;
+
+/**
+ * @summary Update an account snapshot
+ */
+export const useUpdateMonthlyReviewAccountSnapshot = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateMonthlyReviewAccountSnapshot>>,
+    TError,
+    { id: number; data: BodyType<UpdateMonthlyReviewAccountSnapshotBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateMonthlyReviewAccountSnapshot>>,
+  TError,
+  { id: number; data: BodyType<UpdateMonthlyReviewAccountSnapshotBody> },
+  TContext
+> => {
+  return useMutation(
+    getUpdateMonthlyReviewAccountSnapshotMutationOptions(options),
+  );
+};
+
+/**
+ * @summary Delete an account snapshot
+ */
+export const getDeleteMonthlyReviewAccountSnapshotUrl = (id: number) => {
+  return `/api/reviews/monthly/accounts/${id}`;
+};
+
+export const deleteMonthlyReviewAccountSnapshot = async (
+  id: number,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getDeleteMonthlyReviewAccountSnapshotUrl(id), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteMonthlyReviewAccountSnapshotMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteMonthlyReviewAccountSnapshot>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteMonthlyReviewAccountSnapshot>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  const mutationKey = ["deleteMonthlyReviewAccountSnapshot"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteMonthlyReviewAccountSnapshot>>,
+    { id: number }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return deleteMonthlyReviewAccountSnapshot(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteMonthlyReviewAccountSnapshotMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteMonthlyReviewAccountSnapshot>>
+>;
+
+export type DeleteMonthlyReviewAccountSnapshotMutationError =
+  ErrorType<unknown>;
+
+/**
+ * @summary Delete an account snapshot
+ */
+export const useDeleteMonthlyReviewAccountSnapshot = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteMonthlyReviewAccountSnapshot>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteMonthlyReviewAccountSnapshot>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  return useMutation(
+    getDeleteMonthlyReviewAccountSnapshotMutationOptions(options),
+  );
 };
 
 /**
