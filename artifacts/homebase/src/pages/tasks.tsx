@@ -357,7 +357,7 @@ export default function Tasks() {
         className="w-full"
       >
         <TabsList className="w-full justify-start h-12 p-1 bg-muted/30 rounded-xl overflow-x-auto flex-nowrap shrink-0 border border-border/50">
-          <TabsTrigger value="all" className="rounded-lg data-[state=active]:bg-card data-[state=active]:shadow-sm">All</TabsTrigger>
+          <TabsTrigger value="all" className="rounded-lg data-[state=active]:bg-card data-[state=active]:shadow-sm">All lists</TabsTrigger>
           <TabsTrigger value="short" className="rounded-lg data-[state=active]:bg-card data-[state=active]:shadow-sm">Short term</TabsTrigger>
           <TabsTrigger value="long" className="rounded-lg data-[state=active]:bg-card data-[state=active]:shadow-sm">Long term</TabsTrigger>
           <TabsTrigger value="weekly" className="rounded-lg data-[state=active]:bg-card data-[state=active]:shadow-sm">Weekly</TabsTrigger>
@@ -369,6 +369,7 @@ export default function Tasks() {
           value={view}
           onValueChange={(v) => {
             setView(v as TaskView);
+            setSection("all");
             setReorderMode(false);
             clearDragState();
           }}
